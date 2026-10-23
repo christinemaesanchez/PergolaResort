@@ -552,5 +552,6 @@ $current = "calendar";
 
     </main>
 <script src="../js/app.js" data-base="../" data-role="admin"></script>
+<script src="../js/responsive.js"></script>
 </body>
 </html>
