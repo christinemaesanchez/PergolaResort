@@ -541,3 +541,90 @@ footer p {
         font-size: 28px;
     }
 }
+
+/* =========================================================
+   MOBILE RESPONSIVE  (added)
+   ========================================================= */
+
+img, video, svg { max-width: 100%; }
+body { overflow-x: hidden; overflow-wrap: break-word; }
+
+/* hamburger (hidden on desktop) */
+.nav-toggle {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    margin-left: auto;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.7);
+    border-radius: 10px;
+    cursor: pointer;
+    color: #fff;
+}
+.nav-bars { display: block; width: 20px; }
+.nav-bars i { display: block; height: 2px; margin: 4px 0; background: currentColor; border-radius: 2px; transition: transform .2s ease, opacity .2s ease; }
+.navbar.nav-open .nav-bars i:nth-child(1) { transform: translateY(6px) rotate(45deg); }
+.navbar.nav-open .nav-bars i:nth-child(2) { opacity: 0; }
+.navbar.nav-open .nav-bars i:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
+
+@media (max-width: 860px) {
+    .navbar {
+        flex-wrap: wrap;
+        padding: 12px 5%;
+        background: rgba(40, 55, 38, 0.82);
+        -webkit-backdrop-filter: blur(6px);
+        backdrop-filter: blur(6px);
+    }
+    .logo { font-size: 20px; min-width: 0; flex: 1 1 auto; }
+    .nav-toggle { display: inline-flex; }
+    .nav-links {
+        display: none;
+        flex-direction: column;
+        align-items: stretch;
+        flex: 0 0 100%;
+        width: 100%;
+        gap: 0;
+        margin-top: 10px;
+        padding-top: 6px;
+        border-top: 1px solid rgba(255, 255, 255, 0.25);
+        max-height: calc(100vh - 80px);
+        max-height: calc(100dvh - 80px);
+        overflow-y: auto;
+    }
+    .navbar.nav-open .nav-links { display: flex; }
+    .nav-links a { font-size: 16px; padding: 14px 4px; text-align: left; border-bottom: 1px solid rgba(255, 255, 255, 0.12); }
+    .nav-links .login-btn, .nav-links .register-btn {
+        text-align: center;
+        margin-top: 12px;
+        padding: 12px 18px;
+        border-bottom: 0;
+    }
+    .nav-links .login-btn { border: 1px solid #fff; }
+}
+
+@media (max-width: 650px) {
+    /* the old stacked-links layout is replaced by the hamburger above */
+    .navbar { flex-direction: row; gap: 0; text-align: left; align-items: center; }
+
+    .hero { min-height: 100vh; min-height: 100svh; padding: 100px 0 60px; }
+    .hero-content { padding: 20px; }
+    .welcome-text { letter-spacing: 3px; }
+    .hero-buttons { flex-wrap: wrap; }
+    .book-btn, .learn-btn { width: 100%; max-width: 280px; text-align: center; min-height: 46px; }
+    .section-label { letter-spacing: 2px; }
+    .section-description { margin-bottom: 28px; }
+    .section-content { gap: 28px; }
+    .about-card { padding: 28px 20px; }
+    .booking-section { padding: 60px 5%; }
+    footer { padding: 28px 5%; }
+}
+
+@media (max-width: 380px) {
+    .hero h1 { font-size: 34px; }
+    .section h2, .booking-content h2 { font-size: 24px; }
+}
+@media (max-width: 860px) {
+    .navbar.nav-open { background: rgba(40, 55, 38, 0.97); }
+}

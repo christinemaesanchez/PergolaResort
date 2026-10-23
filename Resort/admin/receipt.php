@@ -17,7 +17,7 @@ if (empty($_SESSION["user_id"]) || ($_SESSION["role"] ?? "") !== "admin") {
 /** Friendly admin-only error page (HTTP 200 so Apache doesn't replace it with its own 404 page). */
 function receipt_error(string $title, array $details = []): void {
     header("Content-Type: text/html; charset=utf-8");
-    echo "<!DOCTYPE html><html><head><meta charset='utf-8'><title>Receipt</title></head>"
+    echo "<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Receipt</title></head>"
        . "<body style='font-family:Arial,sans-serif;max-width:720px;margin:40px auto;padding:0 20px;'>"
        . "<h2>" . e($title) . "</h2>";
     if ($details) {

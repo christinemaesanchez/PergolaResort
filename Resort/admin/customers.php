@@ -1,20 +1,38 @@
 <?php
-// ---------- 1. CONNECTION + SESSION ----------
+ob_start();
+// =========================================================================
+// 1. CONNECTION + SESSION INITIALIZATION
+// =========================================================================
 require_once "../config.php";
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// ---------- 2. ADMIN AUTHENTICATION ----------
+// =========================================================================
+// 2. ADMIN AUTHENTICATION
+// =========================================================================
 if (empty($_SESSION["user_id"]) || ($_SESSION["role"] ?? "") !== "admin") {
     header("Location: ../login.php");
     exit();
 }
 
-// ---------- 3. HELPERS ----------
+// =========================================================================
+// 3. HELPERS & SCHEMA CHECK
+// =========================================================================
 function e($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 function peso($n) { return "₱" . number_format((float)$n, 2); }
+
+function ensure_user_status_column($conn) {
+    $res = $conn->query("SHOW COLUMNS FROM users LIKE 'status'");
+    if ($res && $res->num_rows === 0) {
+        $conn->query("ALTER TABLE users ADD COLUMN status VARCHAR(20) DEFAULT 'active'");
+    } else {
+        // Ensure it's VARCHAR so 'deleted' is permitted even if it was an ENUM
+        $conn->query("ALTER TABLE users MODIFY COLUMN status VARCHAR(20) DEFAULT 'active'");
+    }
+}
+ensure_user_status_column($conn);
 
 // Valid ID files live in /uploads/ids/ at the project root; this page is inside /admin/
 function id_url($p) {
@@ -32,15 +50,57 @@ function status_class($s) {
     return "wait";
 }
 
-// ---------- 4. SEARCH & FILTER ----------
+// =========================================================================
+// 4. ACTIONS: DELETE (SOFT), RESTORE, PURGE (PERMANENT)
+// =========================================================================
+if (isset($_GET["action"], $_GET["id"])) {
+    $action = $_GET["action"];
+    $target_id = (int)$_GET["id"];
+    $search_redirect = trim($_GET["search"] ?? "");
+    $redirect_url = "customers.php" . ($search_redirect !== "" ? "?search=" . urlencode($search_redirect) : "");
+
+    if ($target_id > 0) {
+        if ($action === "delete") {
+            $st = $conn->prepare("UPDATE users SET status = 'deleted' WHERE id = ? AND role = 'customer'");
+            if ($st) {
+                $st->bind_param("i", $target_id);
+                $st->execute();
+                $st->close();
+            }
+        } elseif ($action === "restore") {
+            $st = $conn->prepare("UPDATE users SET status = 'active' WHERE id = ? AND role = 'customer'");
+            if ($st) {
+                $st->bind_param("i", $target_id);
+                $st->execute();
+                $st->close();
+            }
+        } elseif ($action === "purge") {
+            $st = $conn->prepare("DELETE FROM users WHERE id = ? AND role = 'customer'");
+            if ($st) {
+                $st->bind_param("i", $target_id);
+                $st->execute();
+                $st->close();
+            }
+        }
+        
+        if (ob_get_length()) ob_clean();
+        header("Location: " . $redirect_url);
+        exit();
+    }
+}
+
+// =========================================================================
+// 5. SEARCH & FILTER
+// =========================================================================
 $search_query = trim($_GET["search"] ?? "");
 
+// Active Customers Query
 $sql = "SELECT u.id, u.full_name, u.email, u.phone, u.valid_id, u.created_at,
                COUNT(r.id) AS total_reservations,
                COALESCE(SUM(CASE WHEN r.status <> 'cancelled' THEN r.total_amount ELSE 0 END), 0) AS total_spent
         FROM users u
         LEFT JOIN reservations r ON r.user_id = u.id
-        WHERE u.role = 'customer'";
+        WHERE u.role = 'customer' AND (u.status IS NULL OR u.status = 'active')";
 
 $params = [];
 $types = "";
@@ -62,15 +122,38 @@ if (!empty($params)) {
 }
 $stmt->execute();
 $customers = $stmt->get_result();
+$stmt->close();
 
-// ---------- 5. CUSTOMER PROFILE (opened with ?profile=ID) ----------
+// Deleted Customers Query
+$del_sql = "SELECT u.id, u.full_name, u.email, u.phone, u.valid_id, u.created_at,
+                   COUNT(r.id) AS total_reservations,
+                   COALESCE(SUM(CASE WHEN r.status <> 'cancelled' THEN r.total_amount ELSE 0 END), 0) AS total_spent
+            FROM users u
+            LEFT JOIN reservations r ON r.user_id = u.id
+            WHERE u.role = 'customer' AND u.status = 'deleted'";
+
+if (!empty($search_query)) {
+    $del_sql .= " AND (u.full_name LIKE ? OR u.email LIKE ? OR u.phone LIKE ?)";
+    $del_stmt = $conn->prepare($del_sql);
+    $del_stmt->bind_param($types, ...$params);
+    $del_stmt->execute();
+    $deleted_customers = $del_stmt->get_result();
+    $del_stmt->close();
+} else {
+    $del_sql .= " GROUP BY u.id ORDER BY u.created_at DESC";
+    $deleted_customers = $conn->query($del_sql);
+}
+
+// =========================================================================
+// 6. CUSTOMER PROFILE (opened with ?profile=ID)
+// =========================================================================
 $profile = null;
 $p_stats = ["c" => 0, "s" => 0];
 $p_recent = [];
 $view_id = (int)($_GET["profile"] ?? 0);
 
 if ($view_id > 0) {
-    $ps = $conn->prepare("SELECT id, full_name, email, phone, address, valid_id, created_at
+    $ps = $conn->prepare("SELECT id, full_name, email, phone, address, valid_id, created_at, status
                           FROM users WHERE id = ? AND role = 'customer' LIMIT 1");
     $ps->bind_param("i", $view_id);
     $ps->execute();
@@ -118,6 +201,63 @@ $current = "customers";
     <title>Customer Directory | Pergola Resort Admin</title>
     <link rel="stylesheet" href="../css/admin.css">
     <style>
+        /* FORCE HIDE ALL SIDEBAR ICONS & BELLS */
+        .sidebar-nav a i, .sidebar-nav a svg, .sidebar-nav span i,
+        .sb-toggle, .sidebar-collapse-btn, .ui-ico,
+        .nf-wrap, .nf-admin, .topbar-bell, .notification-bell, .topbar-icons { 
+            display: none !important; 
+        }
+
+        /* ===== Action Buttons Styling ===== */
+        .btn-delete { background: #fbeae8; color: #a02a35; border: 1px solid #f5c6cb; padding: 5px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; text-decoration: none; display: inline-block; transition: background 0.2s; cursor: pointer; }
+        .btn-delete:hover { background: #f8d7da; }
+
+        .btn-restore { background: #e8f4e8; color: #256030; border: 1px solid #c3e6cb; padding: 5px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; text-decoration: none; display: inline-block; transition: background 0.2s; cursor: pointer; }
+        .btn-restore:hover { background: #d4edda; }
+
+        .btn-purge { background: #343a40; color: #fff; border: 1px solid #343a40; padding: 5px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; text-decoration: none; display: inline-block; transition: background 0.2s; cursor: pointer; }
+        .btn-purge:hover { background: #23272b; }
+
+        .section-divider { margin-top: 40px; }
+
+        /* =====================================================
+           CONFIRM / NOTIFICATION DIALOGS (Same as Reservations)
+           ===================================================== */
+        .modal-bg { display: none; position: fixed; inset: 0; background: rgba(245, 241, 232, .78); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); z-index: 2000; align-items: center; justify-content: center; padding: 20px; }
+        .modal-bg.open { display: flex; }
+        .confirm-card {
+            background: #fff;
+            border: 1px solid #e3dec9;
+            border-radius: 20px;
+            padding: 38px 40px 34px;
+            max-width: 480px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 18px 48px rgba(52, 74, 48, .14);
+        }
+        .confirm-card h3 { margin: 0 0 8px; font-size: 26px; font-weight: 800; color: #344a30; }
+        .confirm-card p { margin: 0; font-size: 15.5px; line-height: 1.5; color: #6b6b6b; }
+        .confirm-actions { display: flex; justify-content: center; gap: 12px; margin-top: 26px; flex-wrap: wrap; }
+        .dlg-btn {
+            height: 46px;
+            padding: 0 28px;
+            font-family: inherit;
+            font-size: 15px;
+            font-weight: 700;
+            border-radius: 12px;
+            border: 2px solid #3b4a32;
+            cursor: pointer;
+            transition: background-color .18s, color .18s, box-shadow .18s, transform .05s;
+        }
+        .dlg-btn:active { transform: translateY(1px); }
+        .dlg-btn:focus-visible { outline: 3px solid rgba(111, 135, 97, .35); outline-offset: 2px; }
+        .dlg-yes { background: #3b4a32; color: #fff; }
+        .dlg-yes:hover { background: #2b3825; border-color: #2b3825; box-shadow: 0 4px 12px rgba(52, 74, 48, .25); }
+        .dlg-no { background: #fff; color: #3b4a32; }
+        .dlg-no:hover { background: #f0ede4; }
+        .dlg-yes.danger { background: #9c2e25; border-color: #9c2e25; }
+        .dlg-yes.danger:hover { background: #7f241d; border-color: #7f241d; }
+
         /* ===== Customer profile pop-up ===== */
         .pf-overlay { position: fixed; inset: 0; z-index: 2000; background: rgba(30, 42, 28, 0.55); display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; }
         .pf-backdrop { position: fixed; inset: 0; cursor: default; }
@@ -153,6 +293,12 @@ $current = "customers";
         .pf-actions { display: flex; gap: 14px; justify-content: flex-end; align-items: center; margin-top: 22px; }
         @media (max-width: 600px) { .pf-grid, .pf-stats { grid-template-columns: 1fr; } .pf-overlay { padding: 16px 10px; } }
     </style>
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            document.querySelectorAll('.sidebar-nav a i, .sidebar-nav a svg, .sb-toggle, .nf-wrap').forEach(el => el.remove());
+        });
+        try{if(localStorage.getItem("pergolaSidebar")==="1"&&window.innerWidth>768)document.documentElement.classList.add("sb-collapsed")}catch(e){}
+    </script>
 </head>
 <body>
 
@@ -203,11 +349,11 @@ $current = "customers";
         </form>
     </section>
 
-    <!-- Customers List Table -->
+    <!-- Active Customers List Table -->
     <section class="card content-card full-width-card">
         <div class="card-header-flex">
             <h3>Registered Customers</h3>
-            <span class="record-count"><?= $customers->num_rows ?> total accounts</span>
+            <span class="record-count"><?= $customers->num_rows ?> active accounts</span>
         </div>
         <div class="table-wrap">
         <?php if ($customers->num_rows > 0): ?>
@@ -240,13 +386,59 @@ $current = "customers";
                             <a href="<?= e(list_url(["profile" => (int)$row["id"]])) ?>"><strong>View Profile</strong></a>
                             &nbsp;|&nbsp;
                             <a href="reservations.php?tab=reservations&amp;user=<?= (int)$row["id"] ?>">Reservations</a>
+                            &nbsp;|&nbsp;
+                            <a href="customers.php?action=delete&amp;id=<?= (int)$row["id"] ?><?= !empty($search_query) ? '&amp;search=' . urlencode($search_query) : '' ?>" class="btn-delete" data-confirm-title="Delete customer?" data-confirm-text="Are you sure you want to move customer #<?= (int)$row["id"] ?> (<?= e($row["full_name"]) ?>) to archive?" data-confirm-yes="Yes, delete" data-confirm-no="Cancel">Delete</a>
                         </td>
                     </tr>
                     <?php endwhile; ?>
                 </tbody>
             </table>
         <?php else: ?>
-            <p class="empty">No customer accounts found matching your search.</p>
+            <p class="empty">No active customer accounts found matching your search.</p>
+        <?php endif; ?>
+        </div>
+    </section>
+
+    <!-- Deleted Customers Section -->
+    <section class="card content-card full-width-card section-divider">
+        <div class="card-header-flex">
+            <h3 style="color: #a02a35;">Deleted / Archived Customers</h3>
+            <span class="record-count"><?= $deleted_customers->num_rows ?> archived accounts</span>
+        </div>
+        <div class="table-wrap">
+        <?php if ($deleted_customers->num_rows > 0): ?>
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Customer Name</th>
+                        <th>Email Address</th>
+                        <th>Contact Number</th>
+                        <th>Member Since</th>
+                        <th>Total Bookings</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php while ($drow = $deleted_customers->fetch_assoc()): ?>
+                    <tr>
+                        <td>#<?= (int)$drow["id"] ?></td>
+                        <td><strong><?= e($drow["full_name"]) ?></strong></td>
+                        <td><span class="sub-text"><?= e($drow["email"]) ?></span></td>
+                        <td><?= trim((string)$drow["phone"]) !== "" ? e($drow["phone"]) : '<span class="sub-text">Not provided</span>' ?></td>
+                        <td><?= e(date("M d, Y", strtotime($drow["created_at"]))) ?></td>
+                        <td><?= (int)$drow["total_reservations"] ?> Bookings</td>
+                        <td style="white-space:nowrap;">
+                            <a href="customers.php?action=restore&amp;id=<?= (int)$drow["id"] ?><?= !empty($search_query) ? '&amp;search=' . urlencode($search_query) : '' ?>" class="btn-restore" data-confirm-title="Restore customer?" data-confirm-text="Are you sure you want to restore customer #<?= (int)$drow["id"] ?> (<?= e($drow["full_name"]) ?>)?" data-confirm-yes="Yes, restore" data-confirm-no="Cancel">Restore</a>
+                            &nbsp;
+                            <a href="customers.php?action=purge&amp;id=<?= (int)$drow["id"] ?><?= !empty($search_query) ? '&amp;search=' . urlencode($search_query) : '' ?>" class="btn-purge" data-confirm-title="Permanently delete?" data-confirm-text="WARNING: This will permanently delete customer #<?= (int)$drow["id"] ?> from the database. This action cannot be undone." data-confirm-yes="Yes, permanently delete" data-confirm-no="Cancel" data-danger="true">Delete Permanently</a>
+                        </td>
+                    </tr>
+                    <?php endwhile; ?>
+                </tbody>
+            </table>
+        <?php else: ?>
+            <p class="empty">No deleted customer accounts.</p>
         <?php endif; ?>
         </div>
     </section>
@@ -266,7 +458,11 @@ $current = "customers";
             <div class="pf-avatar"><?= e($initial) ?></div>
             <div>
                 <h2><?= e($profile["full_name"]) ?></h2>
-                <p>Customer #<?= (int)$profile["id"] ?> &middot; Member since <?= e(date("M d, Y", strtotime($profile["created_at"]))) ?></p>
+                <p>Customer #<?= (int)$profile["id"] ?> &middot; Member since <?= e(date("M d, Y", strtotime($profile["created_at"]))) ?>
+                   <?php if (($profile["status"] ?? 'active') === 'deleted'): ?>
+                       &middot; <strong style="color: #a02a35;">[ARCHIVED/DELETED]</strong>
+                   <?php endif; ?>
+                </p>
             </div>
             <a class="pf-close" href="<?= e(list_url()) ?>" aria-label="Close">&times;</a>
         </div>
@@ -365,5 +561,80 @@ document.body.style.overflow = 'hidden';
 </script>
 <?php endif; ?>
 
+<!-- Confirm Dialog (Custom Modal Notifications matching Reservations page) -->
+<div id="confirmModal" class="modal-bg" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+    <div class="confirm-card">
+        <h3 id="confirmTitle">Are you sure?</h3>
+        <p id="confirmText"></p>
+        <div class="confirm-actions">
+            <button type="button" class="dlg-btn dlg-yes" id="confirmYes">Yes</button>
+            <button type="button" class="dlg-btn dlg-no" id="confirmNo">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    var confirmEl = document.getElementById('confirmModal');
+    var confirmOnYes = null, confirmOnNo = null;
+
+    function askConfirm(opt, onYes, onNo) {
+        document.getElementById('confirmTitle').textContent = opt.title || 'Are you sure?';
+        document.getElementById('confirmText').textContent = opt.text || '';
+        
+        var yesBtn = document.getElementById('confirmYes');
+        yesBtn.textContent = opt.yes || 'Yes';
+        
+        if (opt.danger) {
+            yesBtn.classList.add('danger');
+        } else {
+            yesBtn.classList.remove('danger');
+        }
+
+        document.getElementById('confirmNo').textContent = opt.no || 'Cancel';
+        confirmOnYes = onYes || null;
+        confirmOnNo = onNo || null;
+        confirmEl.classList.add('open');
+        yesBtn.focus();
+    }
+
+    function closeConfirm(accepted) {
+        confirmEl.classList.remove('open');
+        var cb = accepted ? confirmOnYes : confirmOnNo;
+        confirmOnYes = confirmOnNo = null;
+        if (cb) cb();
+    }
+
+    document.getElementById('confirmYes').addEventListener('click', function () { closeConfirm(true); });
+    document.getElementById('confirmNo').addEventListener('click', function () { closeConfirm(false); });
+    confirmEl.addEventListener('click', function (ev) { if (ev.target === confirmEl) closeConfirm(false); });
+
+    // Intercept delete, restore, and purge links to trigger the custom styled dialog
+    document.querySelectorAll('[data-confirm-title]').forEach(function (btn) {
+        btn.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            var targetUrl = btn.getAttribute('href');
+            askConfirm({
+                title: btn.dataset.confirmTitle,
+                text: btn.dataset.confirmText,
+                yes: btn.dataset.confirmYes,
+                no: btn.dataset.confirmNo,
+                danger: btn.dataset.danger === 'true'
+            }, function () {
+                window.location.href = targetUrl;
+            });
+        });
+    });
+
+    document.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Escape' && confirmEl.classList.contains('open')) {
+            closeConfirm(false);
+        }
+    });
+</script>
+<script src="../js/app.js" data-base="../" data-role="admin"></script>
+<script src="../js/responsive.js"></script>
 </body>
 </html>
+<?php
+ob_end_flush();
+?>

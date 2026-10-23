@@ -1,32 +1,22 @@
 <?php
 // =========================================================================
-// 1. CONNECTION + SESSION
+// 1. CONNECTION + SESSION + CUSTOMER GUARD (same as dashboard.php)
 // =========================================================================
 require_once "../config.php";
 require_once "../payment_lib.php";
- 
+$auth_user = auth_guard($conn, "customer", "../login.php");
+
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
- 
-// =========================================================================
-// 2. FETCH RESORT INFO & ACCOMMODATIONS
-// =========================================================================
-$resort_name = "Pergola Resort";
-$res_info = $conn->query("SELECT resort_name FROM resort_info LIMIT 1");
-if ($res_info && $res_info->num_rows > 0) {
-    $resort_name = $res_info->fetch_assoc()["resort_name"];
+if (empty($_SESSION["user_id"]) || ($_SESSION["role"] ?? "") !== "customer") {
+    header("Location: ../login.php");
+    exit();
 }
- 
-ensure_payment_schema($conn);
+$customer_id = (int)$_SESSION["user_id"];
 
-$has_status = ($conn->query("SHOW COLUMNS FROM accommodations LIKE 'status'")->num_rows > 0);
-$status_where = $has_status ? "WHERE status = 'active' OR status IS NULL" : "";
-$accommodations = $conn->query("SELECT * FROM accommodations $status_where ORDER BY is_available DESC, id DESC LIMIT 3");
-$addons = $conn->query("SELECT * FROM resort_addons ORDER BY id ASC LIMIT 4");
- 
 // =========================================================================
-// 3. HELPERS
+// 2. HELPERS
 // =========================================================================
 if (!function_exists('e')) {
     function e($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
@@ -34,10 +24,63 @@ if (!function_exists('e')) {
 if (!function_exists('peso')) {
     function peso($n) { return "₱" . number_format((float)$n, 2); }
 }
- 
-$is_logged_in = !empty($_SESSION["user_id"]);
-$is_customer = ($is_logged_in && ($_SESSION["role"] ?? "") === "customer");
-$is_admin = ($is_logged_in && ($_SESSION["role"] ?? "") === "admin");
+// Image paths are saved relative to the site root; this page lives in /customer
+function img_src($p) {
+    $p = trim((string)$p);
+    if ($p === "" || preg_match('#^(https?:)?//#i', $p) || $p[0] === "/") return $p;
+    return "../" . ltrim($p, "/");
+}
+// Only allow real web links
+function safe_url($u) {
+    $u = trim((string)$u);
+    if ($u === "") return "";
+    if (!preg_match('#^https?://#i', $u)) $u = "https://" . $u;
+    return filter_var($u, FILTER_VALIDATE_URL) ? $u : "";
+}
+
+// =========================================================================
+// 3. RESORT INFO (everything the admin saves in Resort Info shows here)
+// =========================================================================
+$resort = [
+    "resort_name" => "Pergola Resort", "tagline" => "", "contact_number" => "", "email" => "",
+    "location" => "", "description" => "", "facebook_page" => "", "social_links" => "",
+];
+$ri = $conn->query("SELECT * FROM resort_info LIMIT 1");
+if ($ri && $ri->num_rows > 0) {
+    $row_ri = $ri->fetch_assoc();
+    foreach ($resort as $k => $v) {
+        if (isset($row_ri[$k]) && trim((string)$row_ri[$k]) !== "") $resort[$k] = trim((string)$row_ri[$k]);
+    }
+}
+$resort_name = $resort["resort_name"];
+$tagline     = $resort["tagline"];
+$phone       = $resort["contact_number"];
+$phone_href  = preg_replace('/[^0-9+]/', '', $phone);
+$email       = $resort["email"];
+$location    = $resort["location"];
+$about_text  = $resort["description"];
+$fb_url      = safe_url($resort["facebook_page"]);
+$social      = $resort["social_links"];
+$social_url  = preg_match('#^https?://#i', $social) ? safe_url($social) : "";
+
+// Customer name for the greeting
+$first_name = "";
+$cs = $conn->prepare("SELECT full_name FROM users WHERE id = ? LIMIT 1");
+$cs->bind_param("i", $customer_id);
+$cs->execute();
+$cu = $cs->get_result()->fetch_assoc();
+$cs->close();
+if ($cu && !empty($cu["full_name"])) $first_name = trim(explode(" ", trim($cu["full_name"]))[0]);
+
+// =========================================================================
+// 4. FEATURED ACCOMMODATIONS
+// =========================================================================
+ensure_payment_schema($conn);
+$has_status = ($conn->query("SHOW COLUMNS FROM accommodations LIKE 'status'")->num_rows > 0);
+$has_avail  = ($conn->query("SHOW COLUMNS FROM accommodations LIKE 'is_available'")->num_rows > 0);
+$status_where = $has_status ? "WHERE status = 'active' OR status IS NULL" : "";
+$order = ($has_avail ? "is_available DESC, " : "") . "id DESC";
+$accommodations = $conn->query("SELECT * FROM accommodations $status_where ORDER BY $order LIMIT 3");
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -48,276 +91,293 @@ $is_admin = ($is_logged_in && ($_SESSION["role"] ?? "") === "admin");
     <link rel="stylesheet" href="../css/customer.css">
     <link rel="stylesheet" href="../css/ui.css">
     <style>
-        /* HIDE NOTIFICATION BELLS & EXTRA ICONS */
-        .nf-wrap, .nf-bell, .notification-bell, .nav-links i, .nav-links svg {
-            display: none !important;
+        /* Same palette as dashboard.php and accommodations.php */
+        :root {
+            --g-dark: #344a30;
+            --g-mid: #6f8761;
+            --g-hover: #526b49;
+            --line: #ede8dc;
+            --soft: #f7f5ee;
+            --muted: #666;
         }
 
-        /* Hero Section Styling */
+        .nf-wrap, .nf-bell, .notification-bell, .nav-links i, .nav-links svg { display: none !important; }
+
+        /* ===== Hero ===== */
         .hero {
-            position: relative;
-            background: linear-gradient(135deg, rgba(61, 80, 56, 0.9), rgba(120, 137, 106, 0.8)), url('../images/hero-bg.jpg') center/cover no-repeat;
-            background-color: #3D5038;
-            color: #FFFFFF;
-            padding: 100px 20px;
-            text-align: center;
-            border-radius: 16px;
-            margin-bottom: 40px;
-            box-shadow: 0 8px 30px rgba(61, 80, 56, 0.12);
-        }
-        .welcome-text {
-            display: inline-block;
-            background: rgba(255, 255, 255, 0.15);
-            padding: 6px 16px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 700;
-            letter-spacing: 1px;
-            text-transform: uppercase;
-            margin-bottom: 16px;
-            backdrop-filter: blur(4px);
-        }
-        .hero h1 { font-size: 42px; margin-bottom: 12px; font-weight: 800; letter-spacing: -0.5px; }
-        .hero h2 { font-size: 20px; font-weight: 500; margin-bottom: 16px; color: #F5F3EB; }
-        .hero-description { font-size: 16px; max-width: 600px; margin: 0 auto 30px auto; color: #F5F3EB; line-height: 1.6; }
-
-        /* Contact Info Ribbon */
-        .info-ribbon {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 15px;
-            background: #F5F3EB;
-            border: 1px solid #E5E0D4;
-            padding: 20px;
+            grid-template-columns: 1.4fr 1fr;
+            gap: 0;
             border-radius: 12px;
-            margin-bottom: 40px;
-            text-align: center;
+            overflow: hidden;
+            border: 1px solid var(--g-dark);
+            background: var(--g-dark);
+            margin-bottom: 50px;
         }
-        .info-ribbon div { font-size: 13.5px; color: #344232; font-weight: 600; }
-        .info-ribbon span { display: block; font-size: 12px; color: #6B6B6B; font-weight: 400; margin-top: 2px; }
+        .hero-main { padding: 56px 48px; color: #fff; }
+        .hero-hello { font-size: 14px; color: #cfdcc8; margin: 0 0 14px; }
+        .hero-main h1 { font-size: 40px; line-height: 1.15; margin: 0 0 12px; font-weight: 800; color: #fff; }
+        .hero-tag { font-size: 18px; color: #e9efe4; margin: 0 0 28px; max-width: 480px; line-height: 1.5; }
+        .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; }
 
-        /* Section Layouts */
-        .section { padding: 40px 0; border-bottom: 1px solid #E5E0D4; margin-bottom: 40px; }
-        .section-label { font-size: 12px; font-weight: 700; color: #78896A; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
-        .section-description { color: #6B6B6B; font-size: 14px; margin-bottom: 30px; }
+        .hero-side { background: var(--soft); padding: 40px 34px; display: flex; flex-direction: column; justify-content: center; gap: 20px; }
+        .hero-side h2 { font-size: 16px; color: var(--g-dark); margin: 0; font-weight: 700; }
+        .fact { border-left: 3px solid var(--g-mid); padding-left: 14px; }
+        .fact b { display: block; font-size: 12.5px; color: var(--muted); font-weight: 600; margin-bottom: 2px; }
+        .fact span, .fact a { font-size: 14.5px; color: var(--g-dark); font-weight: 600; text-decoration: none; word-break: break-word; }
+        .fact a:hover { text-decoration: underline; }
 
-        /* About Grid */
-        .about-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; align-items: center; }
-        .about-card { background: #F5F3EB; border: 1px solid #E5E0D4; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(61, 80, 56, 0.02); }
-        .about-card h3 { color: #3D5038; font-size: 18px; margin-bottom: 10px; font-weight: 700; }
-        .about-card p { color: #6B6B6B; font-size: 14px; line-height: 1.6; margin: 0; }
+        /* ===== Buttons (same as dashboard / accommodations) ===== */
+        .btn-solid, .btn-ghost {
+            display: inline-flex; align-items: center; justify-content: center;
+            padding: 12px 26px; border-radius: 8px; font-size: 14px; font-weight: 700;
+            letter-spacing: 0.3px; text-decoration: none; cursor: pointer; transition: all 0.2s ease;
+        }
+        .btn-solid { background: var(--g-mid); border: 1px solid var(--g-hover); color: #fff; box-shadow: 0 4px 12px rgba(52,74,48,.15); }
+        .btn-solid:hover { background: var(--g-hover); transform: translateY(-1px); }
+        .hero .btn-solid { background: #fff; border-color: #fff; color: var(--g-dark); }
+        .hero .btn-solid:hover { background: var(--soft); }
+        .btn-ghost { background: transparent; border: 1px solid rgba(255,255,255,.55); color: #fff; }
+        .btn-ghost:hover { background: rgba(255,255,255,.12); }
+        .btn-solid.block { display: flex; width: 100%; box-sizing: border-box; }
 
-        /* Amenities Grid */
-        .amenities-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-top: 25px; }
-        .amenity { background: #F5F3EB; border: 1px solid #E5E0D4; padding: 24px; border-radius: 12px; text-align: center; transition: transform 0.2s ease; }
-        .amenity:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(61, 80, 56, 0.06); }
-        .amenity h3 { color: #3D5038; font-size: 16px; font-weight: 700; margin-bottom: 6px; }
-        .amenity p { color: #6B6B6B; font-size: 13.5px; margin: 0; line-height: 1.5; }
+        /* ===== Sections ===== */
+        .block-section { padding: 0 0 50px; }
+        .block-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 12px; margin-bottom: 24px; }
+        .block-head h2 { margin: 0; font-size: 24px; color: var(--g-dark); font-weight: 700; }
+        .block-head p { margin: 0; font-size: 14px; color: var(--muted); }
+        .link-green { color: var(--g-mid); font-weight: 700; font-size: 14px; text-decoration: none; }
+        .link-green:hover { color: var(--g-dark); text-decoration: underline; }
 
-        /* Booking CTA Box */
-        .booking-section { background: #F5F3EB; border: 1px solid #E5E0D4; border-radius: 16px; padding: 50px 20px; text-align: center; margin: 50px 0; }
-        .booking-section h2 { color: #3D5038; font-size: 28px; font-weight: 800; margin-bottom: 10px; }
-        .booking-section p { color: #6B6B6B; font-size: 15px; max-width: 500px; margin: 0 auto 25px auto; line-height: 1.6; }
+        .about-wrap { display: grid; grid-template-columns: 1.3fr 1fr; gap: 40px; align-items: start; }
+        .about-wrap p { font-size: 15px; line-height: 1.75; color: #555; margin: 0 0 14px; max-width: 62ch; }
+        .about-note { background: var(--soft); border: 1px solid var(--line); border-radius: 12px; padding: 24px; }
+        .about-note h3 { margin: 0 0 8px; font-size: 17px; color: var(--g-dark); font-weight: 700; }
+        .about-note p { font-size: 14px; margin: 0; }
+        .social-line { margin-top: 14px; font-size: 14px; color: var(--g-dark); font-weight: 600; word-break: break-word; }
+        .social-line a { color: var(--g-mid); }
 
-        /* Card & Pill Styling */
-        .card { background: #FFFFFF; border: 1px solid #E5E0D4 !important; border-radius: 12px !important; box-shadow: 0 4px 20px rgba(61, 80, 56, 0.04) !important; transition: transform 0.2s ease, box-shadow 0.2s ease; }
-        .card:hover { transform: translateY(-3px); box-shadow: 0 8px 28px rgba(61, 80, 56, 0.1) !important; }
-        
-        .status-badge { display: inline-block; padding: 5px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase; margin-bottom: 12px; }
-        .status-badge.available { background: #e5f4e7; color: #256030; }
-        .status-badge.unavailable { background: #F0EDE4; color: #6B6B6B; }
+        /* ===== Accommodation cards (same look as accommodations.php) ===== */
+        .acc-card { background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 4px 20px rgba(52,74,48,.04); overflow: hidden; display: flex; flex-direction: column; transition: transform .2s ease, box-shadow .2s ease; }
+        .acc-card:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(52,74,48,.08); }
+        .acc-img { height: 210px; background-size: cover; background-position: center; background-color: var(--soft); border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: center; color: #777; font-size: 13.5px; }
+        .acc-body { padding: 20px; display: flex; flex-direction: column; flex-grow: 1; justify-content: space-between; gap: 16px; }
+        .acc-body h3 { font-size: 18px; color: var(--g-dark); margin: 0 0 6px; font-weight: 700; }
+        .acc-body .price { font-size: 16px; color: var(--g-dark); margin: 0 0 8px; }
+        .acc-body .meta { font-size: 13px; color: var(--muted); margin: 0 0 4px; }
+        .pill { display: inline-block; padding: 5px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: .3px; text-transform: uppercase; margin-top: 10px; }
+        .pill.available { background: #e5f4e7; color: #256030; }
+        .pill.unavailable { background: #f0ede4; color: #666; }
+        .btn-off { display: flex; align-items: center; justify-content: center; padding: 12px; border-radius: 8px; border: 1px solid #e3dec9; background: #f0ede4; color: #888; font-size: 14px; font-weight: 700; cursor: not-allowed; }
 
-        /* Buttons */
-        .book-btn, .primary-btn { background: #78896A !important; border: 1px solid #3D5038 !important; border-radius: 8px !important; font-weight: 700 !important; padding: 12px 28px; color: #FFFFFF; text-decoration: none; display: inline-block; transition: all 0.2s ease; }
-        .book-btn:hover, .primary-btn:hover { background: #3D5038 !important; transform: translateY(-1px); }
-        .learn-btn { background: #FFFFFF; border: 1.5px solid #78896A; color: #3D5038; border-radius: 8px; font-weight: 700; padding: 12px 28px; text-decoration: none; display: inline-block; transition: all 0.2s ease; }
-        .learn-btn:hover { background: #F5F3EB; transform: translateY(-1px); }
+        /* ===== Amenities ===== */
+        .amenity-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 26px 34px; }
+        .amenity-list div { border-top: 2px solid var(--g-mid); padding-top: 12px; }
+        .amenity-list h3 { margin: 0 0 6px; font-size: 16px; color: var(--g-dark); font-weight: 700; }
+        .amenity-list p { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--muted); }
 
-        @media (max-width: 768px) { .about-grid { grid-template-columns: 1fr; } }
+        /* ===== Closing call to action ===== */
+        .cta { background: var(--soft); border: 1px solid var(--line); border-radius: 12px; padding: 36px 40px; display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-bottom: 20px; }
+        .cta h2 { margin: 0 0 6px; font-size: 22px; color: var(--g-dark); font-weight: 700; }
+        .cta p { margin: 0; font-size: 14.5px; color: var(--muted); max-width: 52ch; line-height: 1.6; }
+
+        /* ===== Footer: explicit colors so the text is always readable ===== */
+        .footer { background: var(--g-dark) !important; color: #e9efe4 !important; padding: 36px 0 !important; margin-top: 40px; }
+        .footer p { color: #e9efe4 !important; margin: 0 0 6px; font-size: 13.5px; }
+        .footer .f-name { color: #ffffff !important; font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+        .footer .f-tag { color: #cfdcc8 !important; margin-bottom: 14px; }
+        .footer a { color: #ffffff !important; font-weight: 700; text-decoration: underline; }
+        .footer .copyright { margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,.18); font-size: 12px; color: #b9c9b1 !important; }
+
+        @media (max-width: 860px) {
+            .hero, .about-wrap { grid-template-columns: 1fr; }
+            .hero-main { padding: 40px 26px; }
+            .hero-main h1 { font-size: 32px; }
+            .cta { padding: 28px 24px; }
+        }
+        @media (max-width: 600px) {
+            .hero-actions a { width: 100%; box-sizing: border-box; }
+        }
     </style>
 </head>
 <body>
 
-    <!-- Navigation Bar -->
-    <header class="navbar">
-        <div class="nav-container">
-            <a href="home.php" class="nav-brand" style="text-decoration: none;">
-                <h2>🌿 <?= e($resort_name) ?></h2>
-            </a>
-            <nav class="nav-links">
-                <a href="home.php" class="active">Home</a>
-                <a href="../accommodations.php">Accommodations</a>
-                <a href="dashboard.php">Dashboard</a>
-                <a href="my_bookings.php">My Bookings</a>
-                <a href="profile.php">Profile</a>
-                <a href="../logout.php" class="nav-btn-outline">Sign Out</a>
-            </nav>
-        </div>
-    </header>
+<!-- ============ NAVIGATION BAR ============ -->
+<header class="navbar">
+    <div class="nav-container">
+        <a href="home.php" class="nav-brand">
+            <h2><?= e($resort_name) ?></h2>
+        </a>
+        <nav class="nav-links">
+            <a href="home.php" class="active">Home</a>
+            <a href="../accommodations.php">Accommodations</a>
+            <a href="dashboard.php">Dashboard</a>
+            <a href="my_bookings.php">My Bookings</a>
+            <a href="profile.php">Profile</a>
+            <a href="../logout.php" class="nav-btn-outline">Sign Out</a>
+        </nav>
+    </div>
+</header>
 
-    <!-- Main Container -->
-    <main class="container" style="padding: 20px;">
+<!-- ============ MAIN CONTENT ============ -->
+<main class="container" style="padding: 40px 20px;">
 
-        <!-- Hero Section -->
-        <section class="hero" id="home">
-            <div class="hero-content">
-                <span class="welcome-text">WELCOME TO</span>
-                <h1><?= e($resort_name) ?></h1>
-                <h2>Your peaceful escape awaits.</h2>
-                <p class="hero-description">
-                    Relax, unwind, and enjoy a memorable stay surrounded by
-                    nature, comfort, and beautiful resort scenery.
-                </p>
-                <div style="display: flex; gap: 14px; justify-content: center; flex-wrap: wrap;">
-                    <a href="../accommodations.php" class="book-btn">Book Now</a>
-                    <a href="#about" class="learn-btn">Explore Resort</a>
-                </div>
+    <!-- Hero: name + tagline on the left, contact details from Resort Info on the right -->
+    <section class="hero">
+        <div class="hero-main">
+            <p class="hero-hello"><?= $first_name !== "" ? "Welcome back, " . e($first_name) . "." : "Welcome." ?></p>
+            <h1><?= e($resort_name) ?></h1>
+            <p class="hero-tag"><?= $tagline !== "" ? e($tagline) : "Your peaceful escape awaits." ?></p>
+            <div class="hero-actions">
+                <a href="../accommodations.php" class="btn-solid">Book a stay</a>
+                <a href="#about" class="btn-ghost">About the resort</a>
             </div>
-        </section>
+        </div>
+        <aside class="hero-side">
+            <h2>Plan your visit</h2>
+            <?php if ($location !== ""): ?>
+                <div class="fact"><b>Location</b><span><?= e($location) ?></span></div>
+            <?php endif; ?>
+            <?php if ($phone !== ""): ?>
+                <div class="fact"><b>Contact number</b><a href="tel:<?= e($phone_href) ?>"><?= e($phone) ?></a></div>
+            <?php endif; ?>
+            <?php if ($email !== ""): ?>
+                <div class="fact"><b>Email</b><a href="mailto:<?= e($email) ?>"><?= e($email) ?></a></div>
+            <?php endif; ?>
+            <?php if ($fb_url !== ""): ?>
+                <div class="fact"><b>Facebook</b><a href="<?= e($fb_url) ?>" target="_blank" rel="noopener">Visit our page</a></div>
+            <?php endif; ?>
+            <?php if ($location === "" && $phone === "" && $email === "" && $fb_url === ""): ?>
+                <p style="margin:0; font-size:14px; color:var(--muted);">Contact details will appear here once the resort adds them.</p>
+            <?php endif; ?>
+        </aside>
+    </section>
 
-        <!-- Quick Info Ribbon -->
-        <div class="info-ribbon">
-            <div>📍 Location <span>Purok 17, Poblacion, Manticao, MisOr</span></div>
-            <div>📞 Contact <span>0966 043 4559</span></div>
-            <div>✉️ Email <span>pergolagardens@gmail.com</span></div>
+    <!-- About -->
+    <section class="block-section" id="about">
+        <div class="block-head">
+            <h2>About <?= e($resort_name) ?></h2>
+        </div>
+        <div class="about-wrap">
             <div>
-                🌐 Social
-                <span><a href="https://www.facebook.com/profile.php?id=100087187057803" target="_blank" rel="noopener" style="color: #0047ff; font-weight: 700; text-decoration: underline;">Facebook Page</a></span>
-            </div>
-        </div>
-
-        <!-- About Section -->
-        <section class="section" id="about">
-            <div class="about-grid">
-                <div class="about-text">
-                    <p class="section-label">ABOUT US</p>
-                    <h2 style="color: #3D5038; font-size: 26px; font-weight: 800; margin-bottom: 15px;">Pergola Private Resort, Gardens, and Events</h2>
-                    <p style="color: #6B6B6B; font-size: 14.5px; line-height: 1.7; margin-bottom: 12px;">
-                        Pergola Resort is a relaxing destination where guests
-                        can enjoy comfortable accommodations, refreshing
-                        surroundings, gardens, and quality leisure time for events and getaways.
-                    </p>
-                    <p style="color: #6B6B6B; font-size: 14.5px; line-height: 1.7; margin: 0;">
-                        Our resort booking system makes it easy for you to
-                        view available rooms and cottages, make reservations,
-                        and manage your bookings seamlessly online.
-                    </p>
-                </div>
-                <div class="about-card">
-                    <h3>🌿 Relax & Enjoy</h3>
-                    <p>
-                        Experience a peaceful environment perfect for
-                        families, friends, celebrations, and special occasions away from the busy city life.
-                    </p>
-                </div>
-            </div>
-        </section>
-
-
-        <!-- Rooms Section -->
-        <section class="section" id="rooms">
-            <p class="section-label">OUR ACCOMMODATIONS</p>
-            <h2 style="color: #3D5038; font-size: 26px; font-weight: 800; margin-bottom: 6px;">Rooms & Cottages</h2>
-            <p class="section-description">Choose a comfortable place to stay during your visit.</p>
-
-            <div class="grid-3">
-                <?php if ($accommodations && $accommodations->num_rows > 0): ?>
-                    <?php while ($row = $accommodations->fetch_assoc()):
-                        $imgs = json_decode($row["image_urls"] ?? "[]", true);
-                        if (empty($imgs) && !empty($row["image"])) { $imgs = [$row["image"]]; }
-                        $main_img = !empty($imgs) ? $imgs[0] : "";
-                        $is_open = ((int)($row["is_available"] ?? 1) === 1);
-                    ?>
-                        <div class="card" style="overflow: hidden; display: flex; flex-direction: column;">
-                            <?php if ($main_img !== ""): ?>
-                                <div style="width: 100%; height: 200px; background-image: url('../<?= e($main_img) ?>'); background-size: cover; background-position: center;"></div>
-                            <?php else: ?>
-                                <div style="width: 100%; height: 200px; background: #F5F3EB; display: flex; align-items: center; justify-content: center; color: #6B6B6B; font-size: 13.5px; border-bottom: 1px solid #E5E0D4;">No Image Available</div>
-                            <?php endif; ?>
-
-                            <div style="padding: 20px; display: flex; flex-direction: column; flex-grow: 1; justify-content: space-between;">
-                                <div>
-                                    <h3 style="font-size: 18px; color: #3D5038; margin-bottom: 6px; font-weight: 700;"><?= e($row["name"]) ?></h3>
-                                    <p style="font-size: 16px; color: #3D5038; margin-bottom: 6px;"><strong><?= peso($row["price"]) ?></strong> / night</p>
-                                    <p style="font-size: 13px; color: #6B6B6B; margin-bottom: 4px;">Type: <?= e($row["type"]) ?></p>
-                                    <p style="font-size: 13px; color: #6B6B6B; margin-bottom: 12px;">Max Capacity: <?= (int)$row["capacity"] ?> Persons</p>
-                                    
-                                    <?php if ($is_open): ?>
-                                        <span class="status-badge available">Available</span>
-                                    <?php else: ?>
-                                        <span class="status-badge unavailable">Currently unavailable</span>
-                                    <?php endif; ?>
-                                </div>
-
-                                <?php if ($is_open): ?>
-                                    <a href="../book.php?id=<?= (int)$row["id"] ?>" class="btn primary-btn full-width" style="text-align: center; text-decoration: none; padding: 10px 0; margin-top: 15px;">Book Now</a>
-                                <?php else: ?>
-                                    <span class="btn full-width" style="text-align: center; background: #F0EDE4; color: #888; cursor: not-allowed; border: none; padding: 10px 0; margin-top: 15px; display: block; border-radius: 8px; font-weight: 600;">Not available</span>
-                                <?php endif; ?>
-                            </div>
-                        </div>
-                    <?php endwhile; ?>
+                <?php if ($about_text !== ""): ?>
+                    <p><?= nl2br(e($about_text)) ?></p>
                 <?php else: ?>
-                    <p style="grid-column: 1 / -1; color: #6B6B6B; text-align: center; padding: 30px;">No accommodations currently available.</p>
+                    <p><?= e($resort_name) ?> is a relaxing destination with comfortable accommodations, gardens, and space for events and getaways.</p>
+                    <p>Browse available rooms and cottages, reserve online, and manage your bookings from your dashboard.</p>
+                <?php endif; ?>
+                <?php if ($social !== ""): ?>
+                    <div class="social-line">
+                        Also find us on:
+                        <?php if ($social_url !== ""): ?>
+                            <a href="<?= e($social_url) ?>" target="_blank" rel="noopener"><?= e($social) ?></a>
+                        <?php else: ?>
+                            <?= e($social) ?>
+                        <?php endif; ?>
+                    </div>
                 <?php endif; ?>
             </div>
-        </section>
-
-
-        <!-- Amenities Section -->
-        <section class="section" id="amenities">
-            <p class="section-label">RESORT FEATURES</p>
-            <h2 style="color: #3D5038; font-size: 26px; font-weight: 800; margin-bottom: 6px;">Enjoy Our Amenities</h2>
-            <p class="section-description">Everything you need for a comfortable and refreshing experience.</p>
-
-            <div class="amenities-container">
-                <div class="amenity">
-                    <h3>🏊‍♂️ Swimming Pool</h3>
-                    <p>Relax and enjoy our refreshing pool area.</p>
-                </div>
-                <div class="amenity">
-                    <h3>🌳 Garden & Events Area</h3>
-                    <p>Beautiful scenic spaces ideal for gatherings and relaxation.</p>
-                </div>
-                <div class="amenity">
-                    <h3>🏡 Cozy Cottages</h3>
-                    <p>Stay in comfortable accommodations built for groups and families.</p>
-                </div>
-                <div class="amenity">
-                    <h3>⚡ Easy Booking</h3>
-                    <p>Reserve your preferred room or cottage online in seconds.</p>
-                </div>
+            <div class="about-note">
+                <h3>Relax and enjoy</h3>
+                <p>A quiet place for families, friends, celebrations, and special occasions, away from the busy city.</p>
             </div>
-        </section>
-
-
-        <!-- Booking CTA Section -->
-        <section class="booking-section">
-            <h2>Ready for a relaxing getaway?</h2>
-            <p>
-                Reserve your room or cottage today and start planning
-                your memorable stay at <?= e($resort_name) ?>.
-            </p>
-            <a href="../accommodations.php" class="book-btn">
-                Make a Reservation Now
-            </a>
-        </section>
-
-    </main>
-
-
-    <!-- Footer -->
-    <footer class="footer">
-        <div class="container" style="text-align: center;">
-            <p style="font-weight: 700; color: #3D5038; margin-bottom: 6px; font-size: 16px;">🌿 Pergola Private Resort, Gardens, and Events</p>
-            <p style="color: #6B6B6B; font-size: 13.5px; margin-bottom: 4px;">Purok 17, Poblacion, Manticao, MisOr</p>
-            <p style="color: #6B6B6B; font-size: 13.5px; margin-bottom: 12px;">Tel/Mobile: 0966 043 4559 &nbsp;|&nbsp; Email: pergolagardens@gmail.com</p>
-            <p style="margin-bottom: 16px;">
-                <a href="https://www.facebook.com/profile.php?id=100087187057803" target="_blank" rel="noopener" style="color: #0047ff; font-weight: 700; text-decoration: none;">Visit our Facebook Page &rarr;</a>
-            </p>
-            <p class="copyright" style="font-size: 12px; color: #888;">© <?= date("Y") ?> <?= e($resort_name) ?>. All Rights Reserved.</p>
         </div>
-    </footer>
+    </section>
 
+    <!-- Accommodations -->
+    <section class="block-section" id="rooms">
+        <div class="block-head">
+            <h2>Rooms and cottages</h2>
+            <a href="../accommodations.php" class="link-green">View all accommodations</a>
+        </div>
+
+        <div class="grid-3">
+            <?php if ($accommodations && $accommodations->num_rows > 0): ?>
+                <?php while ($row = $accommodations->fetch_assoc()):
+                    $imgs = json_decode((string)($row["image_urls"] ?? "[]"), true);
+                    $imgs = is_array($imgs) ? array_values(array_filter($imgs, 'is_string')) : [];
+                    if (empty($imgs) && !empty($row["image"])) { $imgs = [$row["image"]]; }
+                    $main_img = !empty($imgs) ? img_src($imgs[0]) : "";
+                    $is_open = ((int)($row["is_available"] ?? 1) === 1);
+                ?>
+                    <div class="acc-card">
+                        <?php if ($main_img !== ""): ?>
+                            <div class="acc-img" style="background-image: url('<?= e($main_img) ?>');"></div>
+                        <?php else: ?>
+                            <div class="acc-img">No image available</div>
+                        <?php endif; ?>
+                        <div class="acc-body">
+                            <div>
+                                <h3><?= e($row["name"]) ?></h3>
+                                <p class="price"><strong><?= peso($row["price"]) ?></strong> / night</p>
+                                <p class="meta">Type: <?= e($row["type"] ?? "Room") ?></p>
+                                <p class="meta">Max capacity: <?= (int)($row["capacity"] ?? 0) ?> persons</p>
+                                <span class="pill <?= $is_open ? 'available' : 'unavailable' ?>"><?= $is_open ? 'Available' : 'Currently unavailable' ?></span>
+                            </div>
+                            <?php if ($is_open): ?>
+                                <a href="../book.php?id=<?= (int)$row["id"] ?>" class="btn-solid block">Book now</a>
+                            <?php else: ?>
+                                <span class="btn-off">Not available for booking</span>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                <?php endwhile; ?>
+            <?php else: ?>
+                <p style="grid-column: 1 / -1; color: var(--muted); text-align: center; padding: 30px;">No accommodations are available right now. Please check back soon.</p>
+            <?php endif; ?>
+        </div>
+    </section>
+
+    <!-- Amenities -->
+    <section class="block-section" id="amenities">
+        <div class="block-head">
+            <h2>What you can enjoy</h2>
+            <p>Everything you need for a comfortable stay.</p>
+        </div>
+        <div class="amenity-list">
+            <div><h3>Swimming pool</h3><p>Cool off in our pool area, open to all guests.</p></div>
+            <div><h3>Gardens and events area</h3><p>Open, green spaces for gatherings, celebrations, and quiet time.</p></div>
+            <div><h3>Cozy cottages</h3><p>Comfortable stays sized for families and groups.</p></div>
+            <div><h3>Online booking</h3><p>Pick your dates, pay the down payment, and track it in My Bookings.</p></div>
+        </div>
+    </section>
+
+    <!-- Closing call to action -->
+    <section class="cta">
+        <div>
+            <h2>Ready to plan your stay?</h2>
+            <p>Choose your dates, pick a room or cottage, and reserve in a few steps.</p>
+        </div>
+        <a href="../accommodations.php" class="btn-solid">See availability</a>
+    </section>
+
+</main>
+
+<!-- ============ FOOTER ============ -->
+<footer class="footer">
+    <div class="container" style="text-align: center;">
+        <p class="f-name"><?= e($resort_name) ?></p>
+        <?php if ($tagline !== ""): ?><p class="f-tag"><?= e($tagline) ?></p><?php endif; ?>
+        <?php if ($location !== ""): ?><p><?= e($location) ?></p><?php endif; ?>
+        <?php
+            $contact_bits = [];
+            if ($phone !== "") $contact_bits[] = "Tel/Mobile: " . e($phone);
+            if ($email !== "") $contact_bits[] = "Email: " . e($email);
+            if ($contact_bits) echo "<p>" . implode(" &nbsp;|&nbsp; ", $contact_bits) . "</p>";
+        ?>
+        <?php if ($fb_url !== ""): ?>
+            <p><a href="<?= e($fb_url) ?>" target="_blank" rel="noopener">Visit our Facebook page</a></p>
+        <?php endif; ?>
+        <p class="copyright">&copy; <?= date("Y") ?> <?= e($resort_name) ?>. All rights reserved.</p>
+    </div>
+</footer>
+
+<script src="../js/app.js" data-base="../" data-role="customer"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        document.querySelectorAll('.nf-wrap, .nf-bell, .notification-bell').forEach(function (el) { el.remove(); });
+    });
+</script>
+<script src="../js/responsive.js"></script>
 </body>
 </html>

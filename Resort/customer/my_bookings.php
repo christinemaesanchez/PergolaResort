@@ -437,9 +437,9 @@ $csrf = csrf_token();
 
 <header class="navbar">
     <div class="nav-container">
-        <a href="../index.php" class="nav-brand"><h2><?= e($resort_name) ?></h2></a>
+        <a href="home.php" class="nav-brand"><h2><?= e($resort_name) ?></h2></a>
         <nav class="nav-links">
-            <a href="../index.php">Home</a>
+            <a href="home.php">Home</a>
             <a href="../accommodations.php">Accommodations</a>
             <a href="dashboard.php">Dashboard</a>
             <a href="my_bookings.php" class="active">My Bookings</a>
@@ -613,5 +613,6 @@ $csrf = csrf_token();
     <div class="container"><p>&copy; <?= date("Y") ?> <?= e($resort_name) ?>. All rights reserved.</p></div>
 </footer>
 <script src="../js/app.js" data-base="../" data-role="customer"></script>
+<script src="../js/responsive.js"></script>
 </body>
 </html>

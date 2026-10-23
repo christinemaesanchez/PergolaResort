@@ -73,7 +73,10 @@ $ac = $conn->query("SELECT COUNT(*) AS total, COALESCE(SUM(is_available = 1), 0)
 $acc_total     = (int)$ac["total"];
 $acc_available = (int)$ac["available"];
 
-$awaiting_payments = (int)$conn->query("SELECT COUNT(*) AS c FROM payments WHERE status = 'pending'")->fetch_assoc()["c"];
+// Counts the same thing the reservations list shows: bookings whose LATEST payment is still pending review
+$awaiting_payments = (int)$conn->query("SELECT COUNT(*) AS c FROM payments p
+        WHERE p.status = 'pending'
+          AND p.id = (SELECT MAX(id) FROM payments WHERE reservation_id = p.reservation_id)")->fetch_assoc()["c"];
 $total_revenue     = (float)$conn->query("SELECT COALESCE(SUM(amount), 0) AS t FROM payments WHERE status = 'paid'")->fetch_assoc()["t"];
 
 // =========================================================================
@@ -108,7 +111,18 @@ $current = "dashboard";
             display: none !important;
         }
 
-        /* Uniform pill-shaped status badges (same colours everywhere) */
+        /* Booking ID column styling matching screenshot reference */
+        .booking-id-link {
+            color: #3b3b3b !important;
+            font-weight: 400 !important;
+            text-decoration: none !important;
+        }
+        .booking-id-link:hover {
+            color: #1a1a1a !important;
+            text-decoration: underline !important;
+        }
+
+        /* Uniform pill-shaped status badges */
         .badge, .pbadge {
             display: inline-block;
             border-radius: 20px !important;
@@ -169,7 +183,7 @@ $current = "dashboard";
         <?php if ($awaiting_payments > 0): ?>
             <div class="message error-message">
                 You have <strong><?= $awaiting_payments ?></strong> payment<?= $awaiting_payments > 1 ? "s" : "" ?> waiting for verification.
-                <a href="reservations.php?tab=reservations&amp;status=pending" style="color: inherit; text-decoration: underline; margin-left: 8px;">Review payments</a>
+                <a href="reservations.php?tab=reservations&amp;status=awaiting_payment" style="color: inherit; text-decoration: underline; margin-left: 8px;">Review payments</a>
             </div>
         <?php endif; ?>
 
@@ -213,7 +227,7 @@ $current = "dashboard";
                                 [$rtext, $badgeClass] = ui_status((string)$r["status"]);
                             ?>
                             <tr>
-                                <td><a href="reservations.php?tab=reservations&amp;search=<?= (int)$r["id"] ?>">#<?= (int)$r["id"] ?></a></td>
+                                <td><a href="reservations.php?tab=reservations&amp;search=<?= (int)$r["id"] ?>" class="booking-id-link">#<?= (int)$r["id"] ?></a></td>
                                 <td><strong><?= e($r["full_name"]) ?></strong></td>
                                 <td><?= e($r["accommodation"]) ?></td>
                                 <td>
@@ -262,5 +276,6 @@ $current = "dashboard";
 
     </main>
 <script src="../js/app.js" data-base="../" data-role="admin"></script>
+<script src="../js/responsive.js"></script>
 </body>
 </html>

@@ -657,3 +657,169 @@ tr:last-child td {
     gap: 10px;
     flex-wrap: wrap;
 }
+
+/* =========================================================
+   MOBILE RESPONSIVE  (added)
+   Breakpoints: 1024px tablets | 768px sidebar becomes a drawer | 720px tables stack | 600px phones
+   ========================================================= */
+
+html { -webkit-text-size-adjust: 100%; }
+img, video, svg { max-width: 100%; }
+.main-content { min-width: 0; overflow-wrap: break-word; }
+
+/* group next to the menu button (bell + Menu) */
+.topbar-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+
+/* drawer backdrop (created by js/app.js) */
+.sb-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(20, 30, 18, 0.5);
+    z-index: 90;
+}
+.sb-backdrop.show { display: block; }
+
+@media (max-width: 1024px) {
+    .main-content { padding: 32px 28px; }
+}
+
+@media (max-width: 768px) {
+    /* ----- sidebar drawer ----- */
+    .sidebar {
+        width: min(280px, 84vw);
+        padding: 24px 18px;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    .sidebar-brand p { margin-bottom: 22px; }
+    .sidebar-nav a, .logout-link { padding: 13px 16px; font-size: 15px; }
+
+    /* ----- compact sticky top bar so the Menu button is always reachable ----- */
+    .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 60;
+        align-items: center;
+        gap: 12px;
+        margin: -24px -20px 22px;
+        padding: 12px 20px;
+        background: #f5f3eb;
+        border-bottom: 1px solid #e3dec9;
+    }
+    .topbar-title { min-width: 0; }
+    .topbar h1 { font-size: 22px; margin-bottom: 2px; line-height: 1.25; }
+    .topbar .section-label { margin-bottom: 2px; font-size: 10px; letter-spacing: 2px; }
+    .menu-btn { min-height: 44px; padding: 0 18px; flex-shrink: 0; }
+
+    .dashboard-card { padding: 18px; }
+    .card { padding: 22px; }
+    .card-header-flex { flex-wrap: wrap; gap: 10px; }
+
+    /* filters and forms */
+    .filter-card { padding: 18px; }
+    .filter-form { gap: 14px; }
+    .form-group-inline { flex: 1 1 100%; min-width: 0; }
+    .btn-group { width: 100%; }
+    .btn-group .admin-btn { flex: 1; }
+    .page-tabs { flex-wrap: wrap; gap: 8px; }
+    .toolbar { align-items: stretch; }
+    .toolbar form { width: 100%; }
+
+    .desc-preview { max-width: 100%; white-space: normal; }
+    .table-actions { flex-wrap: wrap; }
+
+    /* dialogs */
+    .modal-bg { padding: 12px; align-items: flex-start; overflow-y: auto; }
+}
+
+@media (max-width: 720px) {
+    /* ----- tables become stacked cards (js/responsive.js adds the labels) ----- */
+    .table-wrap { overflow-x: visible; }
+    .rtable, .rtable tbody, .rtable tr, .rtable td { display: block; width: 100%; }
+    .rtable thead {
+        position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+    }
+    .rtable tr {
+        margin-bottom: 14px;
+        background: #fff;
+        border: 1px solid #ede8dc;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 2px 10px rgba(52, 74, 48, 0.04);
+    }
+    .rtable tr:last-child td { border-bottom: 1px solid #f2eee3; }
+    .rtable td {
+        position: relative;
+        min-height: 44px;
+        padding: 11px 14px 11px 44%;
+        border-bottom: 1px solid #f2eee3;
+        text-align: left;
+        min-width: 0 !important;
+        white-space: normal;
+    }
+    .rtable td:last-child, .rtable tr:last-child td:last-child { border-bottom: none; }
+    .rtable td[data-label]::before {
+        content: attr(data-label);
+        position: absolute;
+        left: 14px;
+        top: 12px;
+        width: 38%;
+        padding-right: 8px;
+        font-size: 10.5px;
+        font-weight: 700;
+        line-height: 1.4;
+        letter-spacing: .5px;
+        text-transform: uppercase;
+        color: #6f8761;
+    }
+    .rtable td[data-label=""]::before { display: none; }
+    .rtable td[data-label=""], .rtable td.rt-full { padding-left: 14px; }
+    .rtable td.rt-full { text-align: center; }
+    .rtable td.rt-block { padding-left: 14px; padding-top: 34px; }
+    .rtable td.rt-block[data-label=""] { padding-top: 11px; }
+    .rtable td.rt-block::before { width: calc(100% - 28px); }
+    .rtable .date-block { white-space: normal; }
+    .rtable .action-stack, .rtable .pay-cell { width: 100%; min-width: 0; }
+    .rtable .remark { max-width: none; }
+}
+
+@media (max-width: 600px) {
+    .main-content { padding: 20px 16px; }
+    .topbar { margin: -20px -16px 20px; padding: 10px 16px; }
+    .topbar p { display: none; }                 /* keeps the sticky bar slim */
+    .card { padding: 18px; }
+    .stat-value { font-size: 22px; }
+    .form-grid-2 { gap: 14px; }
+    .filter-form .admin-btn, .btn-group .admin-btn { min-height: 44px; }
+    .admin-btn { padding: 13px; }
+
+    /* 16px inputs stop iOS from zooming the page on focus */
+    input, select, textarea { font-size: 16px !important; }
+    input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
+    .status-select { font-size: 14px !important; padding: 9px 10px; }
+
+    .modal, .confirm-card { padding: 24px 18px 20px !important; }
+}
+
+@media (max-width: 380px) {
+    .main-content { padding: 16px 12px; }
+    .topbar { margin: -16px -12px 16px; padding: 10px 12px; }
+    .topbar h1 { font-size: 20px; }
+}
+
+/* stacked layout (<=1024px): grid children may shrink below their content width so a wide table
+   scrolls inside its card instead of pushing the whole page sideways. Desktop layout is untouched. */
+@media (max-width: 1024px) {
+    .grid-2 > *, .grid-2b > *, .dashboard-cards > * { min-width: 0; }
+}
+
+/* ----- calendar page: single-room month grid fits a phone (names are truncated, tap one to open it) ----- */
+@media (max-width: 700px) {
+    .g-grid { gap: 4px; }
+    .g-grid .g-head { padding: 8px 0; font-size: 10px; letter-spacing: 0; border-radius: 6px; }
+    .g-grid .g-cell { min-height: 62px; padding: 5px 4px; font-size: 10px; border-radius: 6px; overflow: hidden; }
+    .g-grid .g-cell .dn { font-size: 12px; margin-bottom: 2px; }
+    .g-grid .g-cell a { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .g-grid .g-cell .sub, .g-grid .g-cell .out { display: none; }
+}

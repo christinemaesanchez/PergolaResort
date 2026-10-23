@@ -87,5 +87,6 @@ $remaining = pay_remaining($total, $submitted, (string)$b["pay_status"]);
         <a href="customer/my_bookings.php" class="btn primary-btn full-width" style="text-align:center; text-decoration:none;">View My Booking</a>
     </div>
 </main>
+<script src="js/responsive.js"></script>
 </body>
 </html>

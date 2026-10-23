@@ -1,8 +1,18 @@
 <?php
+ob_start();   // swallow stray notices/warnings so AJAX replies are always clean JSON
+
 // ---------- 1. CONNECTION + SESSION ----------
 require_once "config.php";
 require_once "payment_lib.php";
-require_once "paypal_config.php";   // PayPal sandbox keys (Client ID is public, Secret stays in PHP)
+
+// PayPal is optional: if paypal_config.php is missing, GCash booking still works
+if (is_file(__DIR__ . "/paypal_config.php")) { require_once __DIR__ . "/paypal_config.php"; }
+if (!defined("PAYPAL_CLIENT_ID")) define("PAYPAL_CLIENT_ID", "");
+if (!defined("PAYPAL_CURRENCY"))  define("PAYPAL_CURRENCY", "PHP");
+$paypal_enabled = (PAYPAL_CLIENT_ID !== "");
+
+if (!function_exists('e'))    { function e($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); } }
+if (!function_exists('peso')) { function peso($n) { return "₱" . number_format((float)$n, 2); } }
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -27,7 +37,8 @@ $user_id = (int)$_SESSION["user_id"];
 $accommodation_id = isset($_GET["id"]) ? (int)$_GET["id"] : 0;
 
 // Set to false once everything works, so customers never see technical errors
-$PAY_DEBUG = false;   // keep false: customers must never see database error text
+// Real error text is shown ONLY when running on your own computer (localhost); never to real customers
+$PAY_DEBUG = in_array($_SERVER["REMOTE_ADDR"] ?? "", ["127.0.0.1", "::1"], true);
 
 ensure_payment_schema($conn);
 $settings = pay_get_settings($conn);
@@ -50,14 +61,24 @@ $max_capacity = (int)($accommodation["capacity"] ?? 1);
 $addons = [];
 $addon_groups = [];
 $addon_cat_order = ["Swimming", "Cooking", "Equipment", "Guest Services", "Time Extensions"];
-$has_cat = false;
-$cc = $conn->query("SHOW COLUMNS FROM addons LIKE 'category'");
-if ($cc && $cc->num_rows > 0) $has_cat = true;
-$ar = $conn->query("SELECT id, name, price, description, pricing_method" . ($has_cat ? ", category" : "") . " FROM addons WHERE is_active = 1 ORDER BY id ASC");
-while ($row = $ar->fetch_assoc()) {
-    $addons[] = $row;
-    $grp = ($has_cat && in_array($row["category"] ?? "", $addon_cat_order, true)) ? $row["category"] : "Other";
-    $addon_groups[$grp][] = $row;
+$addon_cols = [];
+$t = $conn->query("SHOW TABLES LIKE 'addons'");
+if ($t && $t->num_rows > 0) {
+    $rc = $conn->query("SHOW COLUMNS FROM addons");
+    while ($c = $rc->fetch_assoc()) { $addon_cols[$c["Field"]] = true; }
+}
+$has_cat = isset($addon_cols["category"]);
+if (isset($addon_cols["name"], $addon_cols["price"], $addon_cols["pricing_method"])) {
+    $addon_sql = "SELECT id, name, price, pricing_method"
+        . (isset($addon_cols["description"]) ? ", description" : ", '' AS description")
+        . ($has_cat ? ", category" : "")
+        . " FROM addons" . (isset($addon_cols["is_active"]) ? " WHERE is_active = 1" : "") . " ORDER BY id ASC";
+    $ar = $conn->query($addon_sql);
+    while ($ar && ($row = $ar->fetch_assoc())) {
+        $addons[] = $row;
+        $grp = ($has_cat && in_array($row["category"] ?? "", $addon_cat_order, true)) ? $row["category"] : "Other";
+        $addon_groups[$grp][] = $row;
+    }
 }
 // Show categories in a fixed order (Swimming, Cooking, Equipment, Guest Services, Time Extensions, Other)
 $addon_groups_sorted = [];
@@ -77,6 +98,18 @@ function json_out(array $data, int $code = 200): void {
     http_response_code($code);
     header("Content-Type: application/json");
     echo json_encode($data);
+    exit();
+}
+
+// ---------- 5a. ONLY AVAILABLE ACCOMMODATIONS CAN BE BOOKED ----------
+$acc_status = $accommodation["status"] ?? null;
+$acc_open = ((int)($accommodation["is_available"] ?? 1) === 1)
+    && ($acc_status === null || $acc_status === "" || $acc_status === "active");
+if (!$acc_open) {
+    if ($_SERVER["REQUEST_METHOD"] === "POST" || isset($_GET["action"])) {
+        json_out(["ok" => false, "error" => "This accommodation is currently not available for booking."]);
+    }
+    header("Location: accommodations.php");
     exit();
 }
 
@@ -117,6 +150,17 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && in_array($act, ["quote", "submit"],
     if ($guests < 1) $guests = 1;
     if ($guests > $max_capacity) {
         json_out(["ok" => false, "error" => "Number of guests cannot exceed the accommodation's maximum capacity of " . $max_capacity . "."]);
+    }
+
+    $dre = '/^\d{4}-\d{2}-\d{2}$/';
+    if (!preg_match($dre, $check_in) || !preg_match($dre, $check_out)) {
+        json_out(["ok" => false, "error" => "Please choose both a check-in and a check-out date."]);
+    }
+    if ($check_in < date("Y-m-d")) {
+        json_out(["ok" => false, "error" => "Check-in date cannot be in the past."]);
+    }
+    if ($check_out <= $check_in) {
+        json_out(["ok" => false, "error" => "Check-out must be at least one day after check-in."]);
     }
 
     $sel = $_POST["addons"] ?? [];
@@ -249,12 +293,17 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && in_array($act, ["quote", "submit"],
 
 // Main picture = first gallery image the admin uploaded (falls back to the legacy single image)
 $acc_image = $accommodation["image"] ?? ($accommodation["image_url"] ?? "");
-$gi = $conn->prepare("SELECT image_path FROM accommodation_images WHERE accommodation_id = ? ORDER BY sort_order ASC, id ASC LIMIT 1");
-$gi->bind_param("i", $accommodation_id);
-$gi->execute();
-$g1 = $gi->get_result()->fetch_assoc();
-$gi->close();
-if ($g1 && !empty($g1["image_path"])) $acc_image = $g1["image_path"];
+$imgs_json = json_decode((string)($accommodation["image_urls"] ?? "[]"), true);
+if (is_array($imgs_json) && !empty($imgs_json) && is_string($imgs_json[0] ?? null)) { $acc_image = $imgs_json[0]; }
+$tg = $conn->query("SHOW TABLES LIKE 'accommodation_images'");
+if ($tg && $tg->num_rows > 0) {
+    $gi = $conn->prepare("SELECT image_path FROM accommodation_images WHERE accommodation_id = ? ORDER BY sort_order ASC, id ASC LIMIT 1");
+    $gi->bind_param("i", $accommodation_id);
+    $gi->execute();
+    $g1 = $gi->get_result()->fetch_assoc();
+    $gi->close();
+    if ($g1 && !empty($g1["image_path"])) $acc_image = $g1["image_path"];
+}
 $pct_text = pay_percent_display((float)$settings["down_payment_percent"]);
 ?>
 <!DOCTYPE html>
@@ -357,16 +406,20 @@ $pct_text = pay_percent_display((float)$settings["down_payment_percent"]);
         .addon-note { font-size: 12px; color: #777; margin-top: 8px; }
     </style>
     <!-- PayPal JavaScript SDK (uses the public Client ID only) -->
+    <?php if ($paypal_enabled): ?>
     <script src="https://www.paypal.com/sdk/js?client-id=<?= e(PAYPAL_CLIENT_ID) ?>&amp;currency=<?= e(PAYPAL_CURRENCY) ?>"></script>
+    <?php endif; ?>
 </head>
 <body>
 
 <header class="navbar">
     <div class="nav-container">
-        <a href="index.php" class="nav-brand"><h2><?= e($resort_name) ?></h2></a>
+        <a href="customer/home.php" class="nav-brand">
+            <h2><?= e($resort_name) ?></h2>
+        </a>
         <nav class="nav-links">
-            <a href="index.php">Home</a>
-            <a href="accommodations.php">Accommodations</a>
+            <a href="customer/home.php">Home</a>
+            <a href="accommodations.php" class="active">Accommodations</a>
             <a href="customer/dashboard.php">Dashboard</a>
             <a href="customer/my_bookings.php">My Bookings</a>
             <a href="customer/profile.php">Profile</a>
@@ -392,7 +445,7 @@ $pct_text = pay_percent_display((float)$settings["down_payment_percent"]);
     <div class="card" style="padding: 30px; margin-bottom: 30px;">
         <div style="display:flex; gap:20px; flex-wrap:wrap; align-items:center; border-bottom:1px solid #ede8dc; padding-bottom:20px; margin-bottom:20px;">
             <?php if (!empty($acc_image)): ?>
-                <div style="width:150px; height:110px; background-image:url('<?= e($acc_image) ?>'); background-size:cover; background-position:center; border-radius:8px;"></div>
+                <div class="book-thumb" style="background-image:url('<?= e($acc_image) ?>');"></div>
             <?php endif; ?>
             <div>
                 <h2 style="color:#344a30; font-size:22px; margin-bottom:5px; font-weight:700;"><?= e($accommodation["name"]) ?></h2>
@@ -425,7 +478,7 @@ $pct_text = pay_percent_display((float)$settings["down_payment_percent"]);
                 <p style="font-size:12px; color:#777; text-align:center; margin-top:6px;">Click a check-in date, then a check-out date. You can also type the dates below.</p>
             </div>
 
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:20px;">
+            <div class="form-2col">
                 <div>
                     <label class="label" for="check_in">Check-In Date</label>
                     <input class="field" type="date" name="check_in" id="check_in" required min="<?= date('Y-m-d') ?>">
@@ -518,14 +571,17 @@ $pct_text = pay_percent_display((float)$settings["down_payment_percent"]);
                 <div id="formMsg" style="margin-bottom:15px; display:none;"></div>
 
                 <button type="submit" id="submitBtn" class="btn primary-btn full-width" style="padding:14px; font-size:16px;" disabled>Submit Booking &amp; Payment Receipt</button>
+                <p id="submitHint" style="font-size:12.5px; color:#8a6d00; font-weight:600; text-align:center; margin:8px 0 0;"></p>
                 <p style="font-size:12px; color:#777; text-align:center; margin-top:10px;">Your reservation will be confirmed only after our admin verifies your payment receipt.</p>
 
+                <?php if ($paypal_enabled): ?>
                 <!-- ===== PAYPAL OPTION ===== -->
                 <div class="panel" style="text-align:center; margin-top:25px;">
                     <h3 style="color:#344a30; font-size:17px; margin-bottom:6px; font-weight:700;">OR PAY INSTANTLY WITH PAYPAL</h3>
                     <p style="font-size:13px; color:#555; margin-bottom:14px;">Pay the down payment now. Your reservation is confirmed automatically, with no receipt upload needed. Make sure your mobile number is updated in your <a href="customer/profile.php" style="color:#0047ff; font-weight:700;">Profile</a>.</p>
                     <div id="paypal-buttons"></div>
                 </div>
+                <?php endif; ?>
             </div>
         </form>
     </div>
@@ -576,6 +632,8 @@ $pct_text = pay_percent_display((float)$settings["down_payment_percent"]);
     }
     function refreshSubmit() {
         submitBtn.disabled = !(quoteOk && fileInput.files.length === 1);
+        const hint = document.getElementById('submitHint');
+        if (hint) hint.textContent = (quoteOk && submitBtn.disabled) ? 'Upload your GCash receipt above to enable this button.' : '';
         if (quoteOk) setStep(fileInput.files.length ? 3 : 2); else setStep(1);
     }
     function buildData(withFile) {
@@ -642,14 +700,23 @@ $pct_text = pay_percent_display((float)$settings["down_payment_percent"]);
         quoteBox.textContent = 'Checking availability & calculating...';
         try {
             const r = await fetch('book.php?id=' + accId + '&action=quote', { method: 'POST', body: buildData(false), credentials: 'same-origin' });
-            const d = await r.json();
+            const txt = await r.text();
+            let d = null;
+            try { d = JSON.parse(txt); } catch (e) { d = null; }
             if (my !== seq) return;
+            if (!d) {
+                quoteOk = false;
+                renderError('The server sent an unexpected reply (' + r.status + '). Please refresh the page and try again.');
+                paySection.style.display = 'none';
+                refreshSubmit();
+                return;
+            }
             if (d.ok) {
                 quoteOk = true;
                 renderQuote(d);
                 setCalStatus('✓ Available for your selected dates.', true);
                 paySection.style.display = 'block';
-                ensurePayPal();   // render PayPal buttons once the section is visible
+                try { ensurePayPal(); } catch (ppErr) { console.error(ppErr); }   // a PayPal problem must never block GCash booking
             } else {
                 quoteOk = false;
                 renderError(d.error || 'Unable to calculate your booking.');
@@ -900,9 +967,10 @@ $pct_text = pay_percent_display((float)$settings["down_payment_percent"]);
     // ---------- PAYPAL ----------
     let ppRendered = false;
     function ensurePayPal() {
-        if (ppRendered) return;
+        const ppBox = document.getElementById('paypal-buttons');
+        if (!ppBox || ppRendered) return;
         if (typeof paypal === 'undefined') {
-            document.getElementById('paypal-buttons').textContent =
+            ppBox.textContent =
                 'PayPal could not load. Check the Client ID in paypal_config.php (run paypal_test.php).';
             return;
         }
@@ -945,5 +1013,11 @@ $pct_text = pay_percent_display((float)$settings["down_payment_percent"]);
 })();
 </script>
 <script src="js/app.js" data-base="" data-role="customer"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll('.nf-wrap, .nf-bell, .notification-bell').forEach(function (el) { el.remove(); });
+});
+</script>
+<script src="js/responsive.js"></script>
 </body>
 </html>

@@ -207,3 +207,158 @@ th {
 body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; }
 body > main { flex: 1 0 auto; width: 100%; box-sizing: border-box; }
 body > .footer { margin-top: auto; flex-shrink: 0; }
+
+/* =========================================================
+   MOBILE RESPONSIVE  (added)
+   Breakpoints: 860px nav collapses | 720px tables stack | 600px phones | 380px small phones
+   ========================================================= */
+
+html { -webkit-text-size-adjust: 100%; }
+img, video, svg { max-width: 100%; }
+body { overflow-wrap: break-word; }
+
+/* grid-3 could overflow phones narrower than 320px */
+.grid-3 { grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); }
+
+/* hamburger button (hidden on desktop) */
+.nav-toggle {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    margin-left: auto;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    cursor: pointer;
+    color: var(--primary-color);
+}
+.nav-bars { display: block; width: 20px; }
+.nav-bars i { display: block; height: 2px; margin: 4px 0; background: currentColor; border-radius: 2px; transition: transform .2s ease, opacity .2s ease; }
+.navbar.nav-open .nav-bars i:nth-child(1) { transform: translateY(6px) rotate(45deg); }
+.navbar.nav-open .nav-bars i:nth-child(2) { opacity: 0; }
+.navbar.nav-open .nav-bars i:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
+
+@media (max-width: 860px) {
+    .navbar { padding: 10px 0; }
+    .nav-container { flex-wrap: wrap; padding: 0 16px; }
+    .nav-brand { min-width: 0; flex: 1 1 auto; }
+    .nav-brand h2 { font-size: 20px; line-height: 1.25; }
+    .nav-toggle { display: inline-flex; }
+
+    .nav-links {
+        display: none;
+        flex-direction: column;
+        align-items: stretch;
+        flex: 0 0 100%;
+        width: 100%;
+        gap: 0;
+        margin-top: 10px;
+        padding-top: 6px;
+        border-top: 1px solid var(--border-color);
+        max-height: calc(100vh - 80px);
+        max-height: calc(100dvh - 80px);
+        overflow-y: auto;
+    }
+    .navbar.nav-open .nav-links { display: flex; }
+    .nav-links a { padding: 14px 4px; font-size: 16px; border-bottom: 1px solid #f0ede4; }
+    .nav-links a.nav-btn-outline {
+        margin: 14px 0 6px;
+        padding: 12px 20px;
+        text-align: center;
+        border-bottom: 1px solid var(--primary-color);
+    }
+}
+
+@media (max-width: 720px) {
+    /* ----- tables become stacked cards ----- */
+    .table-wrap { overflow-x: visible; }
+    .rtable, .rtable tbody, .rtable tr, .rtable td { display: block; width: 100%; }
+    .rtable thead {                         /* hidden visually, still read by screen readers */
+        position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+    }
+    .rtable { background: transparent; }
+    .rtable tr {
+        margin-bottom: 14px;
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        overflow: hidden;
+    }
+    .rtable td {
+        position: relative;
+        min-height: 44px;
+        padding: 11px 14px 11px 44%;
+        border-bottom: 1px solid #f0ede4;
+        text-align: left;
+        font-size: 14px;
+        min-width: 0 !important;
+    }
+    .rtable td:last-child { border-bottom: none; }
+    .rtable td[data-label]::before {
+        content: attr(data-label);
+        position: absolute;
+        left: 14px;
+        top: 12px;
+        width: 38%;
+        padding-right: 8px;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1.4;
+        letter-spacing: .4px;
+        text-transform: uppercase;
+        color: #777;
+    }
+    .rtable td[data-label=""]::before { display: none; }
+    .rtable td[data-label=""], .rtable td.rt-full { padding-left: 14px; text-align: center; }
+    .rtable td.rt-block { padding-left: 14px; padding-top: 34px; }
+    .rtable td.rt-block[data-label=""] { padding-top: 11px; }
+    .rtable td.rt-block::before { width: calc(100% - 28px); }
+}
+
+@media (max-width: 600px) {
+    .container { padding: 0 16px; }
+    main.container[style] { padding: 24px 16px !important; }
+    .section-title { margin-bottom: 18px; }
+    .section-title h1 { font-size: 24px; line-height: 1.25; }
+    .section-title p { font-size: 14px; }
+    .card[style*="padding"] { padding: 18px !important; }
+
+    /* comfortable touch targets, and 16px inputs so iOS does not zoom on focus */
+    .btn, .primary-btn, .browse-btn, .book-btn { min-height: 44px; }
+    input, select, textarea { font-size: 16px !important; }
+    input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
+
+    .footer { padding: 24px 0; margin-top: 40px; }
+    .footer p { font-size: 13px; }
+}
+
+@media (max-width: 380px) {
+    .nav-brand h2 { font-size: 18px; }
+    .section-title h1 { font-size: 22px; }
+    th, td { padding: 10px; }
+}
+
+
+/* ----- booking page (book.php) + success page ----- */
+.form-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+.book-thumb { width: 150px; height: 110px; flex-shrink: 0; background-size: cover; background-position: center; border-radius: 8px; }
+.srow { gap: 14px; }
+.srow strong { text-align: right; }
+
+@media (max-width: 600px) {
+    .form-2col { grid-template-columns: 1fr; gap: 14px; }
+    .book-thumb { width: 100%; height: 170px; }
+
+    .steps { gap: 6px; }
+    .step { flex: 1 1 calc(33.333% - 6px) !important; min-width: 0 !important; font-size: 10px !important; padding: 9px 4px !important; }
+
+    .cal-day { min-height: 40px; }
+    .cal-nav { width: 44px; height: 44px; }
+
+    .srow { flex-wrap: wrap; font-size: 14px !important; }
+    #receiptPreview img { max-width: 100%; }
+}
+
+.nav-brand { text-decoration: none; }

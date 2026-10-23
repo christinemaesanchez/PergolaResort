@@ -82,6 +82,11 @@ $res_info = $conn->query("SELECT resort_name FROM resort_info LIMIT 1");
 if ($res_info && $res_info->num_rows > 0) {
     $resort_name = $res_info->fetch_assoc()["resort_name"];
 }
+
+// Removes check marks / symbols (e.g. "✓ Reservation confirmed") from status labels
+function clean_label($t) {
+    return trim(preg_replace('/^[^\p{L}\p{N}]+/u', '', (string)$t));
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -99,19 +104,26 @@ if ($res_info && $res_info->num_rows > 0) {
             display: none !important;
         }
 
-        /* REMOVE CHECKMARKS/ICONS INSIDE BADGES */
-        .badge svg, .pbadge svg, .badge i, .pbadge i {
+        /* REMOVE CHECKMARKS/ICONS INSIDE BADGES (svg, font icons, and ::before/::after marks) */
+        .badge svg, .pbadge svg, .badge i, .pbadge i,
+        .badge img, .pbadge img, .badge .ui-ico, .pbadge .ui-ico {
+            display: none !important;
+        }
+        .badge::before, .badge::after, .pbadge::before, .pbadge::after {
+            content: none !important;
             display: none !important;
         }
 
-        /* BLUE ACTION LINKS */
+        /* ACTION LINKS: now use the site's green instead of blue */
         .link-view, .blue-link {
-            color: #0047ff !important;
+            color: #526b49 !important;
             font-weight: 700 !important;
             font-size: 13px;
             text-decoration: none !important;
+            transition: color 0.2s ease;
         }
         .link-view:hover, .blue-link:hover {
+            color: #344a30 !important;
             text-decoration: underline !important;
         }
 
@@ -333,6 +345,7 @@ if ($res_info && $res_info->num_rows > 0) {
                 <tbody>
                     <?php while ($row = $recent_bookings->fetch_assoc()):
                         [$rtext, $rcls] = res_status_info((string)$row["status"]);
+                        $rtext = clean_label($rtext);   // no check marks
                         
                         // Simplify lengthy verification statuses to "Pending"
                         if (stripos($rtext, 'verification') !== false || stripos($rtext, 'pending') !== false) {
@@ -348,6 +361,7 @@ if ($res_info && $res_info->num_rows > 0) {
                         $payBadgeClass = 'b-pending';
                         if (isset($row["pay_status"])) {
                             [$ptext, $pcls] = pay_status_info((string)$row["pay_status"]);
+                            $ptext = clean_label($ptext);   // no check marks
                             if (stripos($ptext, 'verification') !== false || stripos($ptext, 'pending') !== false) {
                                 $ptext = 'Pending';
                             }
@@ -401,5 +415,6 @@ if ($res_info && $res_info->num_rows > 0) {
 </footer>
 
 <script src="../js/app.js" data-base="../" data-role="customer"></script>
+<script src="../js/responsive.js"></script>
 </body>
 </html>

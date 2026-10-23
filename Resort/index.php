@@ -28,7 +28,7 @@ if ($res_info && $res_info->num_rows > 0) {
     <!-- Navigation Bar -->
     <nav class="navbar">
         <div class="logo">
-            <span>🌿</span>
+            <span></span>
             <?= e($resort_name) ?>
         </div>
 
@@ -269,5 +269,6 @@ if ($res_info && $res_info->num_rows > 0) {
 
     </footer>
 
+<script src="js/responsive.js"></script>
 </body>
 </html>

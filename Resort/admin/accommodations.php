@@ -1150,5 +1150,6 @@ document.getElementById('accommodationForm')?.addEventListener('submit', functio
 </script>
 <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
 <script src="../js/app.js" data-base="../" data-role="admin"></script>
+<script src="../js/responsive.js"></script>
 </body>
 </html>

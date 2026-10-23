@@ -254,5 +254,6 @@ if ($res_info && $res_info->num_rows > 0) {
 </footer>
 
 <script src="../js/app.js" data-base="../" data-role="customer"></script>
+<script src="../js/responsive.js"></script>
 </body>
 </html>

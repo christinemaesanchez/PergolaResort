@@ -198,6 +198,17 @@ $current = "calendar";
             display: none !important; 
         }
 
+        /* Booking ID column styling matching screenshot reference */
+        .booking-id-link {
+            color: #3b3b3b !important;
+            font-weight: 400 !important;
+            text-decoration: none !important;
+        }
+        .booking-id-link:hover {
+            color: #1a1a1a !important;
+            text-decoration: underline !important;
+        }
+
         /* UNIFORM DASHBOARD CARDS SIZING */
         .dashboard-cards {
             display: grid;
@@ -513,7 +524,7 @@ $current = "calendar";
                         if ($has_pay) { [$ptext, $payBadgeClass] = ui_status((string)$r["pay_status"]); }
                     ?>
                         <tr>
-                            <td><a href="reservations.php?search=<?= (int)$r["id"] ?>" style="color: #6f8761; font-weight: 700;">#<?= (int)$r["id"] ?></a></td>
+                            <td><a href="reservations.php?search=<?= (int)$r["id"] ?>" class="booking-id-link">#<?= (int)$r["id"] ?></a></td>
                             <td><?= e($rooms[(int)$r["accommodation_id"]]["name"] ?? "Room #" . $r["accommodation_id"]) ?></td>
                             <td><strong><?= e($r["full_name"]) ?></strong></td>
                             <td><?= e(date("M d, Y", strtotime($r["ci"]))) ?></td>

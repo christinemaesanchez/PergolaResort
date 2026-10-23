@@ -302,58 +302,163 @@ $current = "reservations";
             display: none !important; 
         }
 
+        /* Uniform booking ID (same on every admin page) */
+        .res-id { color: #3f3f3f; font-weight: 500; text-decoration: none; white-space: nowrap; }
+        a.res-id:hover { color: #344a30; text-decoration: underline; }
+
         .pay-cell { font-size: 12.5px; line-height: 1.6; min-width: 170px; }
         .pay-cell .badge { margin-bottom: 4px; display: inline-block; }
         
         .page-tabs { display: flex; gap: 10px; margin-bottom: 25px; border-bottom: 1px solid #e3dec9; padding-bottom: 15px; }
         .page-tab-btn { padding: 10px 20px; font-weight: 600; text-decoration: none; border-radius: 8px; color: #555; background: #f0ede4; transition: all 0.2s; font-size: 13.5px; }
         .page-tab-btn.active { background: #6f8761; color: #fff; }
-        
-        /* Neat action column */
-        .action-stack { display: flex; flex-direction: column; gap: 8px; width: 210px; }
-        .action-row { display: flex; gap: 6px; }
-        .action-row .action-btn { flex: 1; }
-        .status-form { display: flex; gap: 6px; margin: 0; }
-        .status-form .table-action-select { flex: 1; min-width: 0; }
+
+        /* =====================================================
+           ACTIONS COLUMN  (Pergola palette: #6f8761 / #344a30 / #e3dec9)
+           ===================================================== */
+        .action-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            width: 232px;
+            padding: 12px;
+            background: #f7f5ee;
+            border: 1px solid #e3dec9;
+            border-radius: 10px;
+        }
+        .action-label {
+            display: block;
+            margin: 0 0 6px;
+            font-size: 10.5px;
+            font-weight: 700;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            color: #7d8a73;
+        }
+        .action-group + .action-group {
+            padding-top: 10px;
+            border-top: 1px dashed #d9d3bb;
+        }
+
+        /* Payment review: two equal buttons side by side */
+        .action-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .action-row form { margin: 0; display: block; }
+
+        /* Status change: select + button on one line */
+        .status-form { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin: 0; }
+
+        /* One shared height + shape for every control */
+        .action-btn,
+        .table-action-select {
+            height: 36px;
+            box-sizing: border-box;
+            font-family: inherit;
+            font-size: 12.5px;
+            border-radius: 8px;
+        }
 
         .action-btn {
-            padding: 8px 12px;
-            font-size: 12px;
+            width: 100%;
+            padding: 0 14px;
             font-weight: 700;
-            line-height: 1.2;
-            border-radius: 6px;
+            line-height: 1;
             text-align: center;
             border: 1px solid transparent;
             cursor: pointer;
             white-space: nowrap;
-            transition: background-color 0.2s, opacity 0.2s;
+            transition: background-color .18s, border-color .18s, color .18s, box-shadow .18s, transform .05s;
         }
-        .action-btn.approve { background: #6f8761; border-color: #526b49; color: #fff; width: 100%; }
-        .action-btn.approve:hover { background: #526b49; }
-        .action-btn.reject { background: #fff; color: #9c2e25; border-color: #e3b3ad; }
-        .action-btn.reject:hover { background: #fbeae8; }
-        .action-btn.update { background: #344a30; color: #fff; }
-        .action-btn.update:hover:not(:disabled) { background: #283a25; }
-        .action-btn.update:disabled { opacity: 0.4; cursor: not-allowed; }
+        .action-btn:active:not(:disabled) { transform: translateY(1px); }
+        .action-btn:focus-visible,
+        .table-action-select:focus-visible { outline: 2px solid #6f8761; outline-offset: 2px; }
+
+        .action-btn.approve { background: #6f8761; border-color: #6f8761; color: #fff; }
+        .action-btn.approve:hover { background: #5d7551; border-color: #5d7551; box-shadow: 0 2px 6px rgba(52, 74, 48, .25); }
+
+        .action-btn.reject { background: #fff; border-color: #e3b3ad; color: #9c2e25; }
+        .action-btn.reject:hover { background: #9c2e25; border-color: #9c2e25; color: #fff; }
+
+        .action-btn.update { width: auto; min-width: 76px; background: #344a30; border-color: #344a30; color: #fff; }
+        .action-btn.update:hover:not(:disabled) { background: #283a25; border-color: #283a25; box-shadow: 0 2px 6px rgba(52, 74, 48, .25); }
+        .action-btn.update:disabled { background: #e3dec9; border-color: #e3dec9; color: #9a9680; cursor: not-allowed; }
 
         .table-action-select {
-            padding: 8px 10px;
-            font-size: 12px;
-            border-radius: 6px;
+            width: 100%;
+            min-width: 0;
+            padding: 0 30px 0 12px;
             border: 1px solid #d6cfba;
-            background: #fff;
+            background-color: #fff;
             color: #344a30;
-            cursor: pointer;
-            outline: none;
             font-weight: 600;
+            cursor: pointer;
+            appearance: none;
+            -webkit-appearance: none;
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%23344a30' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+            background-repeat: no-repeat;
+            background-position: right 11px center;
+            transition: border-color .18s, box-shadow .18s;
         }
-        .table-action-select:hover, .table-action-select:focus { border-color: #6f8761; }
+        .table-action-select:hover { border-color: #6f8761; }
+        .table-action-select:focus { border-color: #6f8761; box-shadow: 0 0 0 3px rgba(111, 135, 97, .15); outline: none; }
 
         .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
         .modal-bg.open { display: flex; }
         .modal { background: #fff; border-radius: 12px; padding: 25px; max-width: 440px; width: 100%; box-shadow: 0 4px 20px rgba(52, 74, 48, 0.1); }
         .modal textarea { width: 100%; padding: 11px 14px; border: 1px solid #e3dec9; border-radius: 8px; margin-top: 8px; background: #f7f5ee; color: #344a30; outline: none; }
         .modal textarea:focus { border-color: #6f8761; background: white; }
+        .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+        .admin-btn.danger { background: #9c2e25; border-color: #9c2e25; color: #fff; }
+        .admin-btn.danger:hover { background: #7f241d; border-color: #7f241d; }
+
+        /* =====================================================
+           CONFIRM / REJECT DIALOGS  (same look as the Sign Out card)
+           ===================================================== */
+        .modal-bg { background: rgba(245, 241, 232, .78); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+        .modal,
+        .confirm-card {
+            background: #fff;
+            border: 1px solid #e3dec9;
+            border-radius: 20px;
+            padding: 38px 40px 34px;
+            max-width: 480px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 18px 48px rgba(52, 74, 48, .14);
+        }
+        .modal h3,
+        .confirm-card h3 { margin: 0 0 8px; font-size: 26px; font-weight: 800; color: #344a30; }
+        .confirm-card p { margin: 0; font-size: 15.5px; line-height: 1.5; color: #6b6b6b; }
+        .modal .form-group { text-align: left; }
+        .modal label { font-size: 13px; font-weight: 600; color: #344a30; }
+        .modal textarea { border-radius: 12px; }
+
+        .modal-actions,
+        .confirm-actions { display: flex; justify-content: center; gap: 12px; margin-top: 26px; flex-wrap: wrap; }
+        .dlg-btn {
+            height: 46px;
+            padding: 0 28px;
+            font-family: inherit;
+            font-size: 15px;
+            font-weight: 700;
+            border-radius: 12px;
+            border: 2px solid #3b4a32;
+            cursor: pointer;
+            transition: background-color .18s, color .18s, box-shadow .18s, transform .05s;
+        }
+        .dlg-btn:active { transform: translateY(1px); }
+        .dlg-btn:focus-visible { outline: 3px solid rgba(111, 135, 97, .35); outline-offset: 2px; }
+        .dlg-yes { background: #3b4a32; color: #fff; }
+        .dlg-yes:hover { background: #2b3825; border-color: #2b3825; box-shadow: 0 4px 12px rgba(52, 74, 48, .25); }
+        .dlg-no { background: #fff; color: #3b4a32; }
+        .dlg-no:hover { background: #f0ede4; }
+        .dlg-yes.danger { background: #9c2e25; border-color: #9c2e25; }
+        .dlg-yes.danger:hover { background: #7f241d; border-color: #7f241d; }
+
+        @media (max-width: 768px) {
+            .action-stack { width: 100%; min-width: 210px; }
+            .modal, .confirm-card { padding: 28px 22px 24px; }
+            .dlg-btn { flex: 1; padding: 0 16px; }
+        }
     </style>
     <script>
         document.addEventListener("DOMContentLoaded", () => {
@@ -466,7 +571,7 @@ $current = "reservations";
                                 $cur_sel = in_array($r["status"], ['confirmed', 'completed', 'cancelled'], true) ? $r["status"] : 'pending';
                             ?>
                             <tr>
-                                <td>#<?= (int)$r["id"] ?></td>
+                                <td><span class="res-id">#<?= (int)$r["id"] ?></span></td>
                                 <td>
                                     <strong><?= e($r["full_name"]) ?></strong><br>
                                     <span class="sub-text"><?= e($r["email"]) ?></span>
@@ -497,36 +602,44 @@ $current = "reservations";
                                 <td><span class="badge <?= $resBadgeClass ?>"><?= e($rtext) ?></span></td>
                                 <td>
                                     <div class="action-stack">
+
                                         <?php if ($can_review): ?>
-                                            <div class="action-row">
-                                                <form method="POST" action="reservations.php" style="margin: 0; flex: 1;">
-                                                    <input type="hidden" name="csrf" value="<?= e($csrf) ?>">
-                                                    <input type="hidden" name="action" value="approve_payment">
-                                                    <input type="hidden" name="payment_id" value="<?= (int)$r["pay_id"] ?>">
-                                                    <input type="hidden" name="active_tab" value="reservations">
-                                                    <input type="hidden" name="f_status" value="<?= e($res_status_filter) ?>">
-                                                    <input type="hidden" name="f_search" value="<?= e($search_query) ?>">
-                                                    <button type="submit" class="action-btn approve" onclick="return confirm('Approve payment and confirm booking #<?= (int)$r["id"] ?>?');">Approve</button>
-                                                </form>
-                                                <button type="button" class="action-btn reject" onclick="openRejectModal(<?= (int)$r["pay_id"] ?>)">Reject</button>
+                                            <div class="action-group">
+                                                <span class="action-label">Payment Review</span>
+                                                <div class="action-row">
+                                                    <form method="POST" action="reservations.php">
+                                                        <input type="hidden" name="csrf" value="<?= e($csrf) ?>">
+                                                        <input type="hidden" name="action" value="approve_payment">
+                                                        <input type="hidden" name="payment_id" value="<?= (int)$r["pay_id"] ?>">
+                                                        <input type="hidden" name="active_tab" value="reservations">
+                                                        <input type="hidden" name="f_status" value="<?= e($res_status_filter) ?>">
+                                                        <input type="hidden" name="f_search" value="<?= e($search_query) ?>">
+                                                        <button type="submit" class="action-btn approve" data-confirm-title="Approve payment?" data-confirm-text="Booking #<?= (int)$r["id"] ?> will be confirmed and the guest will be notified." data-confirm-yes="Yes, approve" data-confirm-no="Cancel">Approve</button>
+                                                    </form>
+                                                    <button type="button" class="action-btn reject" onclick="openRejectModal(<?= (int)$r["pay_id"] ?>)">Reject</button>
+                                                </div>
                                             </div>
                                         <?php endif; ?>
 
-                                        <form method="POST" action="reservations.php" class="status-form" data-id="<?= (int)$r["id"] ?>" data-current="<?= e($cur_sel) ?>">
-                                            <input type="hidden" name="csrf" value="<?= e($csrf) ?>">
-                                            <input type="hidden" name="action" value="update_reservation_status">
-                                            <input type="hidden" name="reservation_id" value="<?= (int)$r["id"] ?>">
-                                            <input type="hidden" name="active_tab" value="reservations">
-                                            <input type="hidden" name="f_status" value="<?= e($res_status_filter) ?>">
-                                            <input type="hidden" name="f_search" value="<?= e($search_query) ?>">
-                                            <select name="status" class="table-action-select" aria-label="Booking status">
-                                                <option value="pending"   <?= $cur_sel === 'pending'   ? 'selected' : '' ?>>Pending</option>
-                                                <option value="confirmed" <?= $cur_sel === 'confirmed' ? 'selected' : '' ?>>Confirmed</option>
-                                                <option value="completed" <?= $cur_sel === 'completed' ? 'selected' : '' ?>>Completed</option>
-                                                <option value="cancelled" <?= $cur_sel === 'cancelled' ? 'selected' : '' ?>>Cancelled</option>
-                                            </select>
-                                            <button type="submit" class="action-btn update" disabled>Update</button>
-                                        </form>
+                                        <div class="action-group">
+                                            <span class="action-label">Booking Status</span>
+                                            <form method="POST" action="reservations.php" class="status-form" data-id="<?= (int)$r["id"] ?>" data-current="<?= e($cur_sel) ?>">
+                                                <input type="hidden" name="csrf" value="<?= e($csrf) ?>">
+                                                <input type="hidden" name="action" value="update_reservation_status">
+                                                <input type="hidden" name="reservation_id" value="<?= (int)$r["id"] ?>">
+                                                <input type="hidden" name="active_tab" value="reservations">
+                                                <input type="hidden" name="f_status" value="<?= e($res_status_filter) ?>">
+                                                <input type="hidden" name="f_search" value="<?= e($search_query) ?>">
+                                                <select name="status" class="table-action-select" aria-label="Booking status">
+                                                    <option value="pending"   <?= $cur_sel === 'pending'   ? 'selected' : '' ?>>Pending</option>
+                                                    <option value="confirmed" <?= $cur_sel === 'confirmed' ? 'selected' : '' ?>>Confirmed</option>
+                                                    <option value="completed" <?= $cur_sel === 'completed' ? 'selected' : '' ?>>Completed</option>
+                                                    <option value="cancelled" <?= $cur_sel === 'cancelled' ? 'selected' : '' ?>>Cancelled</option>
+                                                </select>
+                                                <button type="submit" class="action-btn update" disabled>Update</button>
+                                            </form>
+                                        </div>
+
                                     </div>
                                 </td>
                             </tr>
@@ -584,7 +697,8 @@ $current = "reservations";
     <!-- Reject Payment Modal -->
     <div id="rejectModal" class="modal-bg">
         <div class="modal">
-            <h3 style="margin-bottom: 15px; color: #344a30;">Reject Payment Receipt</h3>
+            <h3>Reject payment?</h3>
+            <p style="margin: 0 0 18px; font-size: 15.5px; color: #6b6b6b;">The guest will be notified and asked to re-upload their receipt.</p>
             <form method="POST" action="reservations.php">
                 <input type="hidden" name="csrf" value="<?= e($csrf) ?>">
                 <input type="hidden" name="action" value="reject_payment">
@@ -596,15 +710,63 @@ $current = "reservations";
                     <label for="admin_remarks">Reason for Rejection (Required)</label>
                     <textarea name="admin_remarks" id="admin_remarks" rows="3" required placeholder="E.g., Receipt is unclear or incorrect amount..."></textarea>
                 </div>
-                <div style="display: flex; gap: 10px; margin-top: 20px;">
-                    <button type="submit" class="admin-btn primary" style="background: #9c2e25;">Confirm Rejection</button>
-                    <button type="button" class="admin-btn secondary" onclick="closeRejectModal()">Cancel</button>
+                <div class="modal-actions">
+                    <button type="submit" class="dlg-btn dlg-yes danger">Yes, reject</button>
+                    <button type="button" class="dlg-btn dlg-no" onclick="closeRejectModal()">Cancel</button>
                 </div>
             </form>
         </div>
     </div>
 
+    <!-- Confirm Dialog (replaces the browser confirm box) -->
+    <div id="confirmModal" class="modal-bg" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+        <div class="confirm-card">
+            <h3 id="confirmTitle">Are you sure?</h3>
+            <p id="confirmText"></p>
+            <div class="confirm-actions">
+                <button type="button" class="dlg-btn dlg-yes" id="confirmYes">Yes</button>
+                <button type="button" class="dlg-btn dlg-no" id="confirmNo">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <script>
+        // Styled confirm dialog: askConfirm({title, text, yes, no}, onYes, onNo)
+        var confirmEl = document.getElementById('confirmModal');
+        var confirmOnYes = null, confirmOnNo = null;
+        function askConfirm(opt, onYes, onNo) {
+            document.getElementById('confirmTitle').textContent = opt.title || 'Are you sure?';
+            document.getElementById('confirmText').textContent = opt.text || '';
+            document.getElementById('confirmYes').textContent = opt.yes || 'Yes';
+            document.getElementById('confirmNo').textContent = opt.no || 'Cancel';
+            confirmOnYes = onYes || null;
+            confirmOnNo = onNo || null;
+            confirmEl.classList.add('open');
+            document.getElementById('confirmYes').focus();
+        }
+        function closeConfirm(accepted) {
+            confirmEl.classList.remove('open');
+            var cb = accepted ? confirmOnYes : confirmOnNo;
+            confirmOnYes = confirmOnNo = null;
+            if (cb) cb();
+        }
+        document.getElementById('confirmYes').addEventListener('click', function () { closeConfirm(true); });
+        document.getElementById('confirmNo').addEventListener('click', function () { closeConfirm(false); });
+        confirmEl.addEventListener('click', function (ev) { if (ev.target === confirmEl) closeConfirm(false); });
+
+        // Approve buttons
+        document.querySelectorAll('[data-confirm-title]').forEach(function (btn) {
+            btn.addEventListener('click', function (ev) {
+                ev.preventDefault();
+                askConfirm({
+                    title: btn.dataset.confirmTitle,
+                    text: btn.dataset.confirmText,
+                    yes: btn.dataset.confirmYes,
+                    no: btn.dataset.confirmNo
+                }, function () { btn.form.submit(); });
+            });
+        });
+
         function openRejectModal(paymentId) {
             document.getElementById('reject_payment_id').value = paymentId;
             document.getElementById('rejectModal').classList.add('open');
@@ -618,17 +780,29 @@ $current = "reservations";
             var sel = f.querySelector('select'), btn = f.querySelector('.update');
             sel.addEventListener('change', function () { btn.disabled = (sel.value === f.dataset.current); });
             f.addEventListener('submit', function (ev) {
+                ev.preventDefault();
                 var from = sel.querySelector('option[value="' + f.dataset.current + '"]').text;
                 var to = sel.options[sel.selectedIndex].text;
-                if (!confirm('Change booking #' + f.dataset.id + ' from ' + from + ' to ' + to + '?')) {
-                    ev.preventDefault();
+                askConfirm({
+                    title: 'Change status?',
+                    text: 'Booking #' + f.dataset.id + ' will change from ' + from + ' to ' + to + '.',
+                    yes: 'Yes, update',
+                    no: 'Stay as ' + from
+                }, function () {
+                    f.submit();
+                }, function () {
                     sel.value = f.dataset.current;
                     btn.disabled = true;
-                }
+                });
             });
         });
-        document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') closeRejectModal(); });
+        document.addEventListener('keydown', function (ev) {
+            if (ev.key !== 'Escape') return;
+            if (confirmEl.classList.contains('open')) closeConfirm(false);
+            else closeRejectModal();
+        });
     </script>
 <script src="../js/app.js" data-base="../" data-role="admin"></script>
+<script src="../js/responsive.js"></script>
 </body>
 </html>
